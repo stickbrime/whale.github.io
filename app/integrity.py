@@ -15,6 +15,7 @@ def prepare_database(engine: Engine) -> None:
         return
 
     with engine.begin() as connection:
+        _migrate_sqlite_schema(connection)
         # Preserve recoverable records rather than deleting them. Invalid user-entered
         # dates are replaced with safe defaults; malformed optional times become NULL.
         connection.exec_driver_sql(
@@ -84,6 +85,31 @@ def prepare_database(engine: Engine) -> None:
         )
 
         _install_validation_triggers(connection)
+
+
+def _migrate_sqlite_schema(connection) -> None:
+    """Add post-ER features to existing local databases without deleting user data."""
+    customer_columns = {
+        row[1] for row in connection.exec_driver_sql("PRAGMA table_info(customers)").fetchall()
+    }
+    order_columns = {
+        row[1] for row in connection.exec_driver_sql("PRAGMA table_info(orders)").fetchall()
+    }
+    if "seiue_id" not in customer_columns:
+        connection.exec_driver_sql("ALTER TABLE customers ADD COLUMN seiue_id INTEGER")
+    for column, sql_type in (
+        ("credit_days", "INTEGER"),
+        ("credit_due_at", "DATETIME"),
+        ("paid_at", "DATETIME"),
+    ):
+        if column not in order_columns:
+            connection.exec_driver_sql(f"ALTER TABLE orders ADD COLUMN {column} {sql_type}")
+    connection.exec_driver_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_customers_seiue_id ON customers(seiue_id)"
+    )
+    connection.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_orders_credit_due_at ON orders(credit_due_at)"
+    )
 
 
 def _install_validation_triggers(connection) -> None:

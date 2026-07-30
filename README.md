@@ -28,6 +28,42 @@ Open the API documentation at <http://127.0.0.1:8000/docs>, alternative document
 at <http://127.0.0.1:8000/redoc>, or the health check at
 <http://127.0.0.1:8000/health>. The SQLite database is created automatically.
 
+## React frontend
+
+The responsive React interface includes ordering, persistent shopping cart, checkout,
+pay-now and 赊账 duration options, account activity, privacy controls, and English/Chinese
+language switching.
+
+赊账 terms are persisted by the backend and limited to **1–14 days**. If a tab becomes
+overdue, the customer's ordering access is locked until the tab is settled from the
+account page. The UI also includes a cart-clear action and a dedicated Shop page with
+search, category filters, price/name/stock sorting, and inventory status.
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+uvicorn app.main:app --reload
+```
+
+The production frontend is served by FastAPI at <http://127.0.0.1:8000>. For frontend
+development, run `npm run dev` in `frontend/`; Vite proxies API requests to port 8000.
+
+### SEIUE OneLogin
+
+The account page uses BAID OneLogin's OAuth2 authorization-code flow. Register Whale as
+an approved application in [baid-onelogin](https://github.com/WebArtistryBAID/baid-onelogin),
+allow the `basic` scope, and register this exact redirect URL:
+
+```text
+http://127.0.0.1:8000/api/v1/auth/callback
+```
+
+Then copy `.env.example` to `.env` and set `ONELOGIN_CLIENT_ID`,
+`ONELOGIN_CLIENT_SECRET`, and a strong random `AUTH_STATE_SECRET`. Client secrets remain
+server-side. OAuth state is verified and login sessions use signed, HTTP-only cookies.
+
 ## API overview
 
 All business endpoints use the `/api/v1` prefix.

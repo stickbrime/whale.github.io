@@ -1,9 +1,10 @@
 """Transactional order endpoints that calculate prices and maintain inventory."""
 
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -30,9 +31,57 @@ def restore_inventory(order: models.Order) -> None:
         item.product.stock_quantity += item.quantity
 
 
+def customer_credit_status(db: Session, customer_id: int) -> schemas.CreditStatus:
+    now = datetime.now()
+    outstanding = db.scalars(
+        select(models.Order).where(
+            models.Order.customer_id == customer_id,
+            models.Order.payment_status == "pending",
+            models.Order.credit_due_at.is_not(None),
+        )
+    ).all()
+    overdue = [order for order in outstanding if order.credit_due_at and order.credit_due_at < now]
+    return schemas.CreditStatus(
+        customer_id=customer_id,
+        locked=bool(overdue),
+        overdue_orders=[order.order_id for order in overdue],
+        outstanding_amount=sum((Decimal(order.total_amount) for order in outstanding), Decimal("0.00")),
+        earliest_due_at=min((order.credit_due_at for order in outstanding if order.credit_due_at), default=None),
+    )
+
+
 @router.post("", response_model=schemas.OrderRead, status_code=status.HTTP_201_CREATED)
-def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
+def create_order(
+    payload: schemas.OrderCreate, request: Request, db: Session = Depends(get_db)
+):
     get_or_404(db, models.Customer, payload.customer_id, "Customer")
+    session_customer_id = request.session.get("customer_id")
+    if session_customer_id is not None and session_customer_id != payload.customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Signed-in customers can only place orders on their own account",
+        )
+    if payload.payment_status == schemas.PaymentStatus.pending and session_customer_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SEIUE login is required to open a tab",
+        )
+    credit = customer_credit_status(db, payload.customer_id)
+    if credit.locked:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Account locked: an overdue tab must be paid before any new order",
+        )
+    if payload.payment_status == schemas.PaymentStatus.pending and payload.credit_days is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="credit_days is required for a tab and must be between 1 and 14",
+        )
+    if payload.payment_status == schemas.PaymentStatus.paid and payload.credit_days is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="credit_days can only be used when payment_status is pending",
+        )
     if payload.employee_id is not None:
         get_or_404(db, models.Employee, payload.employee_id, "Employee")
 
@@ -60,6 +109,11 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
         pickup_time=payload.pickup_time,
         payment_status=payload.payment_status.value,
         total_amount=Decimal("0.00"),
+        credit_days=payload.credit_days,
+        credit_due_at=(datetime.now() + timedelta(days=payload.credit_days))
+        if payload.payment_status == schemas.PaymentStatus.pending and payload.credit_days
+        else None,
+        paid_at=datetime.now() if payload.payment_status == schemas.PaymentStatus.paid else None,
     )
     total = Decimal("0.00")
     for requested_item in payload.items:
@@ -123,9 +177,10 @@ def list_orders(
     ).all()
 
 
-@router.get("/{order_id}", response_model=schemas.OrderRead)
-def get_order(order_id: int, db: Session = Depends(get_db)):
-    return get_or_404(db, models.Order, order_id, "Order")
+@router.get("/customers/{customer_id}/credit-status", response_model=schemas.CreditStatus)
+def get_credit_status(customer_id: int, db: Session = Depends(get_db)):
+    get_or_404(db, models.Customer, customer_id, "Customer")
+    return customer_credit_status(db, customer_id)
 
 
 @router.patch("/{order_id}", response_model=schemas.OrderRead)
@@ -152,10 +207,37 @@ def update_order(order_id: int, payload: schemas.OrderUpdate, db: Session = Depe
             if new_status in TERMINAL_STATUSES and current_status not in TERMINAL_STATUSES:
                 restore_inventory(order)
             order.payment_status = new_status
+            if new_status == "paid":
+                order.paid_at = datetime.now()
 
     db.commit()
     db.refresh(order)
     return order
+
+
+@router.post("/{order_id}/pay", response_model=schemas.OrderRead)
+def pay_order(order_id: int, request: Request, db: Session = Depends(get_db)):
+    order = get_or_404(db, models.Order, order_id, "Order")
+    session_customer_id = request.session.get("customer_id")
+    if session_customer_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="SEIUE login required")
+    if session_customer_id != order.customer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This tab belongs to another account")
+    if order.payment_status != "pending" or order.credit_due_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only an unpaid tab can be settled",
+        )
+    order.payment_status = "paid"
+    order.paid_at = datetime.now()
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+@router.get("/{order_id}", response_model=schemas.OrderRead)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    return get_or_404(db, models.Order, order_id, "Order")
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)

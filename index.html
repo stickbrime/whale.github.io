@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coffee Shop Ordering Pipeline</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #f5f1e8;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #1c241f;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1c241f;
+      color: #f5f1e8;
+      padding: 32px 24px;
+      text-align: center;
+      border-bottom: 3px solid #b3864b;
+    }
+    header h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin-top: 10px;
+      color: #9eaa8f;
+      font-size: 14px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    header .badge {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 6px 14px;
+      border: 1px solid #b3864b;
+      color: #b3864b;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .legend {
+      max-width: 1000px;
+      margin: 28px auto 0;
+      padding: 0 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #6f756f;
+    }
+    .legend-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .diagram-wrapper {
+      max-width: 1400px;
+      margin: 24px auto 48px;
+      padding: 0 20px;
+    }
+    .diagram-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(28,36,31,0.08);
+      overflow: hidden;
+      padding: 32px 20px 20px;
+      overflow-x: auto;
+    }
+    .diagram-container svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px 24px 32px;
+      flex-wrap: wrap;
+    }
+    .controls button {
+      padding: 10px 22px;
+      border: 1px solid #263d32;
+      background: transparent;
+      color: #263d32;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      transition: all 0.2s;
+    }
+    .controls button:hover {
+      background: #263d32;
+      color: white;
+    }
+
+    .stats {
+      max-width: 1000px;
+      margin: -12px auto 0;
+      padding: 0 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      color: #6f756f;
+      font-size: 12px;
+    }
+    .stats strong { color: #1c241f; }
+
+    .section-labels {
+      max-width: 1000px;
+      margin: 28px auto 40px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    .section-label {
+      padding: 12px 14px;
+      background: white;
+      border-left: 3px solid #b3864b;
+      font-size: 11px;
+      line-height: 1.5;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .section-label strong {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 3px;
+      color: #263d32;
+    }
+    .section-label small {
+      color: #6f756f;
+    }
+
+    footer {
+      padding: 30px 24px;
+      text-align: center;
+      color: #6f756f;
+      font-size: 11px;
+      border-top: 1px solid #e0dbd0;
+    }
+
+    @media (max-width: 700px) {
+      .diagram-container { padding: 16px 8px; }
+      header { padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>☕ Coffee Shop Ordering Pipeline</h1>
+    <p>End-to-end flow covering authentication, browsing, cart management, checkout, payment, fulfillment, and post-order actions — with every customer decision branch and edge case.</p>
+    <span class="badge">Pipeline diagram · Mermaid v11</span>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-swatch" style="background:#1a472a"></span> Start</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#2d2d2d"></span> Terminal exit</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#1a7a3a"></span> Success</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#a74e43"></span> Failure / reject</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#3b5998"></span> Customer decision</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <span><strong>10</strong> pipeline stages</span>
+    <span><strong>40+</strong> customer decision branches</span>
+    <span><strong>10</strong> terminal outcomes</span>
+    <span>Covers: auth · credit lock · browse · cart · checkout · payment · fulfillment · post-order</span>
+  </div>
+
+  <div class="diagram-wrapper">
+    <div class="diagram-container">
+      <pre class="mermaid">
+flowchart TD
+    START([Customer arrives]) --> A[Enter app / visit store]
+
+    %% AUTH
+    A --> A1{Has account?}
+    A1 -- No, skip --> B[Browse menu]
+    A1 -- Yes, sign in --> A2[Authenticate SEIUE / email]
+    A2 --> A3{Valid session?}
+    A3 -- No --> A4[Login failed]
+    A4 --> A5{Customer action}
+    A5 -- Retry --> A2
+    A5 -- Continue as guest --> B
+    A3 -- Yes --> A6[Load profile + loyalty + credit]
+    A6 --> A7{Credit overdue?}
+    A7 -- Yes --> A8[Show locked account banner]
+    A8 --> A9{Customer action}
+    A9 -- Settle overdue tab --> A10[Process settlement]
+    A10 --> A6
+    A9 -- View only mode --> B
+    A7 -- No --> B
+
+    %% BROWSE
+    B --> B1[Browse menu · filter / search / sort]
+    B1 --> C{Item selected?}
+    C -- No, continue --> B1
+    C -- Yes --> C1{In stock?}
+    C1 -- No --> C2[Show Sold out]
+    C2 --> C3{Customer action}
+    C3 -- Browse alternatives --> B1
+    C3 -- Set back-in-stock alert --> C4([Notification])
+    C3 -- Leave --> EXIT1([Exit])
+    C1 -- Yes --> D[Add to cart + qty + customization]
+
+    %% CART
+    D --> E{More items?}
+    E -- Yes --> B1
+    E -- No --> F[Review cart]
+
+    F --> F1{Cart actions}
+    F1 -- Edit quantity --> F2[Update · clamp to stock]
+    F2 --> F
+    F1 -- Edit customization --> F3[Update preferences]
+    F3 --> F
+    F1 -- Remove item --> F
+    F1 -- Clear cart --> F4{Confirm clear?}
+    F4 -- Confirm --> F5[Cart emptied]
+    F5 --> E
+    F4 -- Cancel --> F
+    F1 -- Apply loyalty --> F6[Discount applied]
+    F6 --> F
+    F1 -- Checkout --> G[Begin checkout]
+    F1 -- Save cart --> F7[localStorage]
+
+    %% CHECKOUT
+    G --> G1{Identity}
+    G1 -- New customer --> G2[Enter name / email / phone]
+    G2 --> G3[Account created at checkout]
+    G1 -- Existing --> G4[Select saved profile]
+    G4 --> G3
+    G3 --> H[Select pickup time]
+    H --> H1{Order type}
+    H1 -- Takeaway --> H2[Set collection time]
+    H1 -- Dine-in --> H3[Assign table / token]
+    H1 -- Delivery --> H4[Enter address]
+    H4 --> H5{Address serviceable?}
+    H5 -- No --> H6[Unavailable area]
+    H6 --> H7{Customer action}
+    H7 -- Switch to pickup --> H2
+    H7 -- Edit address --> H4
+    H7 -- Cancel --> CANCEL1([Abandoned])
+    H5 -- Yes --> I[Choose payment]
+    H2 --> I; H3 --> I
+
+    %% PAYMENT
+    I --> P1{Payment method}
+    P1 -- Card / Wallet --> P2[Process online payment]
+    P1 -- Pay at counter --> P3[Mark paid · no capture]
+    P1 -- Credit tab (赊账) --> P4[Tab selected]
+
+    P4 --> P5[Choose 1-14 days]
+    P5 --> P6{Authenticated?}
+    P6 -- No --> P7[Login required]
+    P7 --> P8{Customer action}
+    P8 -- Sign in --> A2
+    P8 -- Other method --> I
+    P6 -- Yes --> P9[Schedule due date]
+
+    P1 -- Gift card --> GFT[Validate card]
+    GFT --> GFT1{Valid?}
+    GFT1 -- No --> GFT2[Invalid]
+    GFT2 --> GFT3{Customer action}
+    GFT3 -- Retry --> GFT
+    GFT3 -- Other method --> I
+    GFT1 -- Yes --> P2
+
+    P2 --> P10{Gateway success?}
+    P10 -- No --> P11[Show failure reason]
+    P11 --> P12{Customer action}
+    P12 -- Retry same --> P2
+    P12 -- Different card --> I
+    P12 -- Pay at counter --> P3
+    P12 -- Cancel --> PAYCANCEL([Cancelled + not captured])
+    P10 -- Yes --> J[Payment confirmed]
+    P3 --> J; P9 --> J
+
+    %% ORDER CREATION
+    J --> K[Create order · validate stock + total]
+    K --> K1{Stock sufficient at commit?}
+    K1 -- No --> K2[Reject · stock conflict]
+    K2 --> K3{Customer action}
+    K3 -- Review cart --> F
+    K3 -- Cancel --> CANCEL2([Cancelled])
+    K1 -- Yes --> K4[Deduct inventory + persist]
+
+    %% KITCHEN
+    K4 --> L[Order sent to barista queue]
+    L --> L1{Store accepts?}
+    L1 -- No --> L2[Order rejected]
+    L2 --> L3{Resolution}
+    L3 -- Auto-refund --> L4[Refund initiated]
+    L3 -- Offer substitute --> L5{Customer accepts?}
+    L5 -- Yes --> L[Re-queue]
+    L5 -- No --> L6[Cancel + refund]
+    L4 --> L6
+    L1 -- Yes --> M[Prepare drinks / food]
+    M --> M1{Prep issue?}
+    M1 -- Yes --> M2[Delay / partial outage]
+    M2 --> M3{Customer decision}
+    M3 -- Wait --> M
+    M3 -- Accept replacement --> M
+    M3 -- Cancel --> L6
+    M1 -- No --> N[Quality check + pack]
+
+    %% FULFILLMENT
+    N --> O{Fulfillment mode}
+    O -- Dine-in --> O1[Serve at table / call token]
+    O -- Takeaway --> O2[Notify ready for pickup]
+    O -- Delivery --> O3[Assign rider + dispatch]
+
+    O3 --> O4{Delivered?}
+    O4 -- Yes --> O5[Confirmed]
+    O4 -- No --> O6[Re-contact / redelivery]
+    O6 --> O7{Resolution}
+    O7 -- Delivered --> O5
+    O7 -- Failed --> O8[Compensate / refund]
+    O1 --> X([Completed])
+    O2 --> X; O5 --> X; O8 --> X
+
+    %% POST-ORDER
+    X --> POST{Post-order action}
+    POST -- Rate / review --> POST1[Submit feedback]
+    POST -- Report issue --> POST2[Support ticket]
+    POST2 --> POST3{Resolution}
+    POST3 -- Refund --> X
+    POST3 -- Remake --> M
+    POST -- Reorder --> B1
+    POST -- Account activity --> ACT[Account page]
+    ACT --> POST
+    POST -- Nothing --> END([Exit])
+    POST1 --> END
+
+    %% CREDIT LIFECYCLE
+    X -.-> CR{Was order a tab?}
+    CR -- Yes --> CR1[Track due date]
+    CR1 --> CR2{Due passed?}
+    CR2 -- Yes --> CR3[Account locked → A7]
+    CR2 -- No --> POST
+
+    classDef START fill:#1a472a,color:#fff,stroke:#1a472a
+    classDef END fill:#2d2d2d,color:#fff,stroke:#2d2d2d
+    classDef CUST fill:#3b5998,color:#fff,stroke:#3b5998
+    classDef SUCCESS fill:#1a7a3a,color:#fff
+    classDef FAIL fill:#a74e43,color:#fff
+
+    class START START
+    class END,EXIT1,CANCEL1,PAYCANCEL,CANCEL2 END
+    class A4,A8,C2,C1,GFT1,C4 FAIL
+    class J,K4,O1,O2,O5,X SUCCESS
+    class A1,A3,A5,A7,A9,C,C1,C3,E,F1,F4,G1,H1,H5,H7,I,P1,P6,P8,P10,P12,K1,K3,L1,L3,L5,M1,M3,O4,O6,O7,POST,CR,CR2 CUST
+      </pre>
+    </div>
+  </div>
+
+  <div class="section-labels">
+    <div class="section-label"><strong>01 Auth</strong><small>Login, guest mode, credit lock check, tab settlement</small></div>
+    <div class="section-label"><strong>02 Browse</strong><small>Menu filtering, stock display, sold-out alerts</small></div>
+    <div class="section-label"><strong>03 Cart</strong><small>Add/edit/remove, loyalty, clamp to stock, persist</small></div>
+    <div class="section-label"><strong>04 Checkout</strong><small>Identity, pickup time, order type, address validation</small></div>
+    <div class="section-label"><strong>05 Payment</strong><small>Card, pay-at-counter, credit tab (1–14d), gift card</small></div>
+    <div class="section-label"><strong>06 Order</strong><small>Stock re-verify, atomic deduction, conflict reject</small></div>
+    <div class="section-label"><strong>07 Kitchen</strong><small>Accept/reject, substitution, refund initiation</small></div>
+    <div class="section-label"><strong>08 Fulfill</strong><small>Dine-in, takeaway, delivery with rider retry</small></div>
+    <div class="section-label"><strong>09 Post</strong><small>Rating, support ticket, reorder, account view</small></div>
+    <div class="section-label"><strong>10 Credit</strong><small>Due date tracking, account locking/unlocking</small></div>
+  </div>
+
+  <footer>
+    Coffee Shop Ordering Pipeline · Built with Mermaid.js
+  </footer>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      themeVariables: {
+        fontFamily: 'DM Sans, -apple-system, sans-serif',
+        fontSize: '13px',
+        primaryColor: '#263d32',
+        primaryTextColor: '#fff',
+        primaryBorderColor: '#263d32',
+        lineColor: '#6f756f',
+        secondaryColor: '#f5f1e8',
+        tertiaryColor: '#fff',
+        clusterBkg: '#fbf9f4',
+        clusterBorder: '#e0dbd0',
+        edgeLabelBackground: '#ffffff',
+        nodeBorder: '#263d32',
+      },
+      flowchart: {
+        curve: 'basis',
+        padding: 12,
+        nodeSpacing: 30,
+        rankSpacing: 40,
+        useMaxWidth: true,
+        htmlLabels: true,
+      }
+    });
+  </script>
+</body>
+</html>

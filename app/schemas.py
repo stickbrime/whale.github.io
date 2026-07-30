@@ -43,6 +43,7 @@ class CustomerRead(CustomerBase, ORMModel):
     customer_id: int
     loyalty_points: int
     join_date: date
+    seiue_id: Optional[int] = None
 
 
 class EmployeeBase(BaseModel):
@@ -129,7 +130,8 @@ class OrderCreate(BaseModel):
     customer_id: int = Field(gt=0)
     employee_id: Optional[int] = Field(default=None, gt=0)
     pickup_time: Optional[time] = None
-    payment_status: PaymentStatus = PaymentStatus.pending
+    payment_status: PaymentStatus = PaymentStatus.paid
+    credit_days: Optional[int] = Field(default=None, ge=1, le=14)
     items: List[OrderItemCreate] = Field(min_length=1, max_length=50)
 
     @field_validator("payment_status")
@@ -137,6 +139,11 @@ class OrderCreate(BaseModel):
     def validate_new_order_status(cls, value: PaymentStatus) -> PaymentStatus:
         if value not in (PaymentStatus.pending, PaymentStatus.paid):
             raise ValueError("A new order must start as pending or paid")
+        return value
+
+    @field_validator("credit_days")
+    @classmethod
+    def validate_credit_days(cls, value: Optional[int]) -> Optional[int]:
         return value
 
 
@@ -158,6 +165,9 @@ class OrderRead(ORMModel):
     pickup_time: Optional[time]
     customer_id: int
     employee_id: Optional[int]
+    credit_days: Optional[int]
+    credit_due_at: Optional[datetime]
+    paid_at: Optional[datetime]
     items: List[OrderItemRead]
 
 
@@ -190,3 +200,18 @@ class Message(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+
+
+class CreditStatus(BaseModel):
+    customer_id: int
+    locked: bool
+    overdue_orders: List[int]
+    outstanding_amount: Decimal
+    earliest_due_at: Optional[datetime]
+
+
+class AuthStatus(BaseModel):
+    authenticated: bool
+    configured: bool
+    customer: Optional[CustomerRead] = None
+    credit: Optional[CreditStatus] = None

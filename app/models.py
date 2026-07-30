@@ -34,6 +34,7 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     loyalty_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     join_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    seiue_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, index=True, nullable=True)
 
     orders: Mapped[List["Order"]] = relationship(back_populates="customer", passive_deletes=True)
 
@@ -103,6 +104,9 @@ class Order(Base):
     employee_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("employees.employee_id", ondelete="SET NULL"), nullable=True, index=True
     )
+    credit_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    credit_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="orders")
     employee: Mapped[Optional["Employee"]] = relationship(back_populates="orders")
@@ -118,6 +122,10 @@ class Order(Base):
         CheckConstraint(
             "payment_status IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')",
             name="ck_order_payment_status",
+        ),
+        CheckConstraint(
+            "credit_days IS NULL OR (credit_days >= 1 AND credit_days <= 14)",
+            name="ck_order_credit_days",
         ),
     )
 

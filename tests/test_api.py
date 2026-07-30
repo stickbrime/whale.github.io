@@ -1,10 +1,16 @@
-"""Integration tests for CRUD, order totals, stock, and failure outcomes."""
+"""Integration tests for CRUD, credit enforcement, auth, totals, and stock."""
+
+from datetime import datetime, timedelta
+from base64 import b64encode
+import json
 
 import pytest
+import itsdangerous
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app import models
 from tests.conftest import TestingSessionLocal
 
 
@@ -44,6 +50,27 @@ def test_health_and_openapi_are_available(client: TestClient):
     assert health.status_code == 200
     assert health.json()["status"] == "healthy"
     assert client.get("/openapi.json").status_code == 200
+    auth = client.get("/api/v1/auth/me")
+    assert auth.status_code == 200
+    assert auth.json() == {
+        "authenticated": False,
+        "configured": False,
+        "customer": None,
+        "credit": None,
+    }
+
+
+def test_built_react_frontend_and_client_routes_are_served(client: TestClient):
+    home = client.get("/")
+    assert home.status_code == 200
+    assert "<div id=\"root\"></div>" in home.text
+    assert "Whale — Coffee Shop" in home.text
+
+    account = client.get("/account")
+    assert account.status_code == 200
+    assert "<div id=\"root\"></div>" in account.text
+    shop = client.get("/shop")
+    assert shop.status_code == 200
 
 
 def test_customer_crud_and_duplicate_email(client: TestClient):
@@ -82,6 +109,7 @@ def test_order_calculates_total_and_decrements_stock(client: TestClient):
                     "customization": "Oat milk, extra hot",
                 }
             ],
+            "payment_status": "paid",
         },
     )
     assert response.status_code == 201, response.text
@@ -104,6 +132,7 @@ def test_insufficient_stock_rejects_entire_order(client: TestClient):
         json={
             "customer_id": customer["customer_id"],
             "items": [{"product_id": product["product_id"], "quantity": 2}],
+            "payment_status": "paid",
         },
     )
     assert response.status_code == 409
@@ -120,6 +149,7 @@ def test_cancelling_order_restores_inventory_and_is_terminal(client: TestClient)
         json={
             "customer_id": customer["customer_id"],
             "items": [{"product_id": product["product_id"], "quantity": 3}],
+            "payment_status": "paid",
         },
     ).json()
     cancelled = client.patch(
@@ -169,3 +199,86 @@ def test_database_rejects_malformed_customer_date_from_raw_sql(client: TestClien
     response = client.get("/api/v1/customers")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_credit_is_limited_to_two_weeks(client: TestClient):
+    customer = create_customer(client)
+    product = create_product(client)
+    invalid = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": customer["customer_id"],
+            "payment_status": "pending",
+            "credit_days": 15,
+            "items": [{"product_id": product["product_id"], "quantity": 1}],
+        },
+    )
+    assert invalid.status_code == 422
+
+    data = b64encode(json.dumps({"customer_id": customer["customer_id"]}).encode())
+    client.cookies.set(
+        "session",
+        itsdangerous.TimestampSigner("change-me-in-production").sign(data).decode(),
+    )
+    valid = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": customer["customer_id"],
+            "payment_status": "pending",
+            "credit_days": 14,
+            "items": [{"product_id": product["product_id"], "quantity": 1}],
+        },
+    )
+    assert valid.status_code == 201, valid.text
+    assert valid.json()["credit_days"] == 14
+    assert valid.json()["credit_due_at"] is not None
+
+
+def test_overdue_credit_locks_orders_and_payment_unlocks_account(client: TestClient):
+    customer = create_customer(client)
+    product = create_product(client, stock=5)
+    data = b64encode(json.dumps({"customer_id": customer["customer_id"]}).encode())
+    signed_session = itsdangerous.TimestampSigner("change-me-in-production").sign(data).decode()
+    client.cookies.set("session", signed_session)
+    tab = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": customer["customer_id"],
+            "payment_status": "pending",
+            "credit_days": 1,
+            "items": [{"product_id": product["product_id"], "quantity": 1}],
+        },
+    ).json()
+    with TestingSessionLocal() as db:
+        order = db.get(models.Order, tab["order_id"])
+        order.credit_due_at = datetime.now() - timedelta(minutes=1)
+        db.commit()
+
+    credit = client.get(
+        f"/api/v1/orders/customers/{customer['customer_id']}/credit-status"
+    )
+    assert credit.status_code == 200
+    assert credit.json()["locked"] is True
+    blocked = client.post(
+        "/api/v1/orders",
+        json={
+            "customer_id": customer["customer_id"],
+            "payment_status": "paid",
+            "items": [{"product_id": product["product_id"], "quantity": 1}],
+        },
+    )
+    assert blocked.status_code == 423
+
+    paid = client.post(f"/api/v1/orders/{tab['order_id']}/pay")
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["payment_status"] == "paid"
+    unlocked = client.get(
+        f"/api/v1/orders/customers/{customer['customer_id']}/credit-status"
+    )
+    assert unlocked.json()["locked"] is False
+
+
+def test_login_endpoint_explains_missing_onelogin_configuration(client: TestClient):
+    response = client.get("/api/v1/auth/login")
+    assert response.status_code == 503
+    assert "ONELOGIN_CLIENT_ID" in response.json()["detail"]
