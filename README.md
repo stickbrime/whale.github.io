@@ -121,3 +121,20 @@ pytest -q
 ```
 
 Tests use an isolated in-memory database and do not modify application data.
+## GitHub Pages deployment
+
+The built React frontend is deployed from the repository root (served at `https://stickbrime.github.io`).
+
+```bash
+cd frontend
+npm install
+npm run build      # uses base ./ and emits to frontend/dist
+cd ..
+# Copy the production build to the repo root for GitHub Pages
+cp -r frontend/dist/assets ./assets
+cp frontend/dist/index.html ./index.html
+git add index.html assets
+# Commit and push from the default branch, then enable Pages in repo settings
+```
+
+Note: The frontend expects the FastAPI backend (with the `/api` endpoints) at `/api`. A live API must be hosted separately for ordering, login, and menu data to work.
