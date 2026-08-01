@@ -55,7 +55,14 @@ app.include_router(products.router, prefix="/api/v1")
 app.include_router(orders.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 
-frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+# The Vite project lives in frontend/whale_frontend/ (build output in its dist/ folder).
+# Fall back to the legacy frontend/dist location if present.
+_base = Path(__file__).resolve().parent.parent
+frontend_dist = _base / "frontend" / "whale_frontend" / "dist"
+if not frontend_dist.is_dir():
+    legacy = _base / "frontend" / "dist"
+    if legacy.is_dir():
+        frontend_dist = legacy
 if frontend_dist.is_dir():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="frontend-assets")
 
