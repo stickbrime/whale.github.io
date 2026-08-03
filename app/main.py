@@ -22,7 +22,6 @@ async def lifespan(_app: FastAPI):
     prepare_database(engine)
     yield
 
-
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
@@ -33,9 +32,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=settings.cors_origins,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+origins = [
+    "https://frontend-4zm.pages.dev/",  # 你的React线上域名
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
