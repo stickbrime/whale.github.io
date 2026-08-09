@@ -20,6 +20,13 @@ class PaymentStatus(str, Enum):
     cancelled = "cancelled"
 
 
+class PaymentMethod(str, Enum):
+    cash = "cash"
+    wechat = "wechat"
+    alipay = "alipay"
+    card = "card"
+
+
 class CustomerBase(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
@@ -43,7 +50,6 @@ class CustomerRead(CustomerBase, ORMModel):
     customer_id: int
     loyalty_points: int
     join_date: date
-    seiue_id: Optional[int] = None
 
 
 class EmployeeBase(BaseModel):
@@ -130,8 +136,8 @@ class OrderCreate(BaseModel):
     customer_id: int = Field(gt=0)
     employee_id: Optional[int] = Field(default=None, gt=0)
     pickup_time: Optional[time] = None
-    payment_status: PaymentStatus = PaymentStatus.paid
-    credit_days: Optional[int] = Field(default=None, ge=1, le=14)
+    payment_method: PaymentMethod = PaymentMethod.wechat
+    payment_status: PaymentStatus = PaymentStatus.pending
     items: List[OrderItemCreate] = Field(min_length=1, max_length=50)
 
     @field_validator("payment_status")
@@ -139,11 +145,6 @@ class OrderCreate(BaseModel):
     def validate_new_order_status(cls, value: PaymentStatus) -> PaymentStatus:
         if value not in (PaymentStatus.pending, PaymentStatus.paid):
             raise ValueError("A new order must start as pending or paid")
-        return value
-
-    @field_validator("credit_days")
-    @classmethod
-    def validate_credit_days(cls, value: Optional[int]) -> Optional[int]:
         return value
 
 
@@ -161,13 +162,11 @@ class OrderRead(ORMModel):
     order_id: int
     order_date: datetime
     total_amount: Decimal
+    payment_method: PaymentMethod
     payment_status: PaymentStatus
     pickup_time: Optional[time]
     customer_id: int
     employee_id: Optional[int]
-    credit_days: Optional[int]
-    credit_due_at: Optional[datetime]
-    paid_at: Optional[datetime]
     items: List[OrderItemRead]
 
 
@@ -175,6 +174,17 @@ class OrderUpdate(BaseModel):
     employee_id: Optional[int] = Field(default=None, gt=0)
     pickup_time: Optional[time] = None
     payment_status: Optional[PaymentStatus] = None
+
+
+class PaymentRequest(BaseModel):
+    """模拟支付请求；网关真实接入时替换为带签名的回调 payload。"""
+    third_party_ref: Optional[str] = Field(default=None, max_length=100)
+
+
+class PaymentResponse(BaseModel):
+    order_id: int
+    payment_status: PaymentStatus
+    message: str
 
 
 class StockAdjustment(BaseModel):
@@ -202,16 +212,22 @@ class HealthResponse(BaseModel):
     service: str
 
 
-class CreditStatus(BaseModel):
+class ManualLoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+
+
+class CreditStatus(ORMModel):
     customer_id: int
     locked: bool
     overdue_orders: List[int]
     outstanding_amount: Decimal
-    earliest_due_at: Optional[datetime]
+    earliest_due_at: Optional[date]
 
 
-class AuthStatus(BaseModel):
+class AuthStatus(ORMModel):
     authenticated: bool
-    configured: bool
-    customer: Optional[CustomerRead] = None
+    configured: bool = True
+    customer: Optional["CustomerRead"] = None
     credit: Optional[CreditStatus] = None

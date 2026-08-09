@@ -34,7 +34,6 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
     loyalty_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     join_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
-    seiue_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, index=True, nullable=True)
 
     orders: Mapped[List["Order"]] = relationship(back_populates="customer", passive_deletes=True)
 
@@ -96,6 +95,7 @@ class Order(Base):
         DateTime, server_default=func.now(), nullable=False
     )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
+    payment_method: Mapped[str] = mapped_column(String(20), default="wechat", nullable=False)
     payment_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
     pickup_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     customer_id: Mapped[int] = mapped_column(
@@ -104,9 +104,6 @@ class Order(Base):
     employee_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("employees.employee_id", ondelete="SET NULL"), nullable=True, index=True
     )
-    credit_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    credit_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
-    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     customer: Mapped["Customer"] = relationship(back_populates="orders")
     employee: Mapped[Optional["Employee"]] = relationship(back_populates="orders")
@@ -120,12 +117,12 @@ class Order(Base):
     __table_args__ = (
         CheckConstraint("total_amount >= 0", name="ck_order_total_nonnegative"),
         CheckConstraint(
-            "payment_status IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')",
-            name="ck_order_payment_status",
+            "payment_method IN ('cash', 'wechat', 'alipay', 'card')",
+            name="ck_order_payment_method",
         ),
         CheckConstraint(
-            "credit_days IS NULL OR (credit_days >= 1 AND credit_days <= 14)",
-            name="ck_order_credit_days",
+            "payment_status IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')",
+            name="ck_order_payment_status",
         ),
     )
 

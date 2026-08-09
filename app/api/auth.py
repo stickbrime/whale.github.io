@@ -1,171 +1,125 @@
-"""OAuth2 login integration for BAID's SEIUE OneLogin service + manual email login."""
+"""Manual cookie-based authentication endpoints.
+
+This is intentionally lightweight — the cookie stores a base64-encoded
+customer_id so the storefront can identify the returning customer without
+a separate session store. For production, replace with a signed token
+(JWT / OAuth) or a proper session backend.
+"""
 
 import base64
-import secrets
-from typing import Any, Dict, Optional
-from urllib.parse import urlencode
+import json
+from datetime import date, datetime
+from typing import Optional
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.api.orders import customer_credit_status
-from app.config import settings
+from app.api.orders import compute_customer_credit
 from app.database import get_db
 
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
+
+COOKIE_NAME = "whale_customer"
+COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 
-def _current_customer(request: Request, db: Session):
-    customer_id = request.session.get("customer_id")
-    return db.get(models.Customer, customer_id) if customer_id else None
+def _encode_customer_id(customer_id: int) -> str:
+    payload = json.dumps({"c": customer_id}).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-class ManualLoginRequest(BaseModel):
-    email: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+def _decode_customer_id(token: str) -> Optional[int]:
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded)
+        return json.loads(decoded).get("c")
+    except Exception:
+        return None
+
+
+def _authenticated_customer_id(request: Request) -> Optional[int]:
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+    return _decode_customer_id(token)
+
+
+def _set_customer_cookie(response: Response, customer_id: int) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=_encode_customer_id(customer_id),
+        max_age=COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        samesite="lax",
+        httponly=True,
+    )
 
 
 @router.post("/login/manual", response_model=schemas.Message)
-def manual_login(body: ManualLoginRequest, request: Request, db: Session = Depends(get_db)):
-    """Log in by email. If the customer exists, sign in as them.
-    If not, create a new customer with the given details."""
-    customer = db.scalar(select(models.Customer).where(models.Customer.email == body.email))
+def manual_login(
+    payload: schemas.ManualLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Look up (or create) a customer by email and set a cookie."""
+    customer = db.scalar(
+        select(models.Customer).where(models.Customer.email == payload.email)
+    )
+
     if customer is None:
-        if not body.first_name or not body.last_name:
+        if not payload.first_name or not payload.last_name:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No account found with that email. Provide first_name and last_name to create one.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Customer not found; provide first_name and last_name to create one",
             )
+        phone_tail = abs(hash(payload.email)) % 100000
         customer = models.Customer(
-            first_name=body.first_name,
-            last_name=body.last_name,
-            email=body.email,
-            phone=f"manual-{body.email.split('@')[0]}",
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            email=payload.email,
+            phone=f"auto-{phone_tail:05d}",
         )
         db.add(customer)
         db.commit()
         db.refresh(customer)
-    request.session.clear()
-    request.session["customer_id"] = customer.customer_id
-    return {"message": "Signed in successfully"}
 
-
-@router.get("/login")
-def login(request: Request):
-    if not settings.onelogin_configured:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SEIUE OneLogin is not configured. Set ONELOGIN_CLIENT_ID and ONELOGIN_CLIENT_SECRET.",
-        )
-    state = secrets.token_urlsafe(32)
-    request.session["oauth_state"] = state
-    query = urlencode(
-        {
-            "client_id": settings.onelogin_client_id,
-            "response_type": "code",
-            "redirect_uri": settings.onelogin_redirect_uri,
-            "scope": "basic",
-            "state": state,
-        }
-    )
-    return RedirectResponse(f"{settings.onelogin_base_url.rstrip('/')}/oauth2/authorize?{query}")
-
-
-@router.get("/callback")
-def callback(
-    request: Request,
-    code: str = "",
-    state: str = "",
-    error: str = "",
-    db: Session = Depends(get_db),
-):
-    expected_state = request.session.pop("oauth_state", None)
-    if error:
-        return RedirectResponse(f"/account?auth_error={error}")
-    if not code or not expected_state or not secrets.compare_digest(state, expected_state):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
-
-    credentials = base64.b64encode(
-        f"{settings.onelogin_client_id}:{settings.onelogin_client_secret}".encode()
-    ).decode()
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            token_response = client.post(
-                f"{settings.onelogin_base_url.rstrip('/')}/oauth2/token",
-                headers={"Authorization": f"Basic {credentials}"},
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": settings.onelogin_redirect_uri,
-                },
-            )
-            token_response.raise_for_status()
-            access_token = token_response.json()["access_token"]
-            me_response = client.get(
-                f"{settings.onelogin_base_url.rstrip('/')}/api/v1/me",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            me_response.raise_for_status()
-            profile: Dict[str, Any] = me_response.json()
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="SEIUE OneLogin authentication failed",
-        ) from exc
-
-    try:
-        seiue_id = int(profile["seiueId"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="SEIUE OneLogin returned an invalid user profile",
-        ) from exc
-    customer = db.scalar(select(models.Customer).where(models.Customer.seiue_id == seiue_id))
-    display_name = str(profile.get("name") or f"SEIUE {seiue_id}").strip()
-    name_parts = display_name.split(maxsplit=1)
-    first_name = name_parts[0]
-    last_name = name_parts[1] if len(name_parts) > 1 else "Student"
-    phone = str(profile.get("phone") or f"seiue-{seiue_id}")
-    email = f"seiue-{seiue_id}@beijing.academy"
-    if customer is None:
-        customer = models.Customer(
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            phone=phone,
-            seiue_id=seiue_id,
-        )
-        db.add(customer)
-    else:
-        customer.first_name = first_name
-        customer.last_name = last_name
-        customer.phone = phone
-    db.commit()
-    db.refresh(customer)
-    request.session.clear()
-    request.session["customer_id"] = customer.customer_id
-    return RedirectResponse("/account?login=success")
+    _set_customer_cookie(response, customer.customer_id)
+    return schemas.Message(message=f"Logged in as {customer.first_name} {customer.last_name}")
 
 
 @router.get("/me", response_model=schemas.AuthStatus)
-def me(request: Request, db: Session = Depends(get_db)):
-    customer = _current_customer(request, db)
+def auth_me(request: Request, db: Session = Depends(get_db)):
+    customer_id = _authenticated_customer_id(request)
+    if customer_id is None:
+        return schemas.AuthStatus(
+            authenticated=False,
+            configured=True,
+            customer=None,
+            credit=None,
+        )
+
+    customer = db.get(models.Customer, customer_id)
+    if customer is None:
+        return schemas.AuthStatus(
+            authenticated=False,
+            configured=True,
+            customer=None,
+            credit=None,
+        )
+
+    credit = compute_customer_credit(db, customer)
     return schemas.AuthStatus(
-        authenticated=customer is not None,
-        configured=settings.onelogin_configured,
+        authenticated=True,
+        configured=True,
         customer=customer,
-        credit=customer_credit_status(db, customer.customer_id) if customer else None,
+        credit=credit,
     )
 
 
 @router.post("/logout", response_model=schemas.Message)
-def logout(request: Request):
-    request.session.clear()
-    return {"message": "Signed out"}
+def logout(response: Response):
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return schemas.Message(message="Logged out")

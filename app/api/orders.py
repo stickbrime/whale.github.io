@@ -1,10 +1,11 @@
 """Transactional order endpoints that calculate prices and maintain inventory."""
 
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ from app.database import get_db
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 TERMINAL_STATUSES = {"failed", "refunded", "cancelled"}
-ALLOWED_TRANSITIONS = {
+ALLOWED_TRANSITIONS: Dict[str, set] = {
     "pending": {"paid", "failed", "cancelled"},
     "paid": {"refunded", "cancelled"},
     "failed": set(),
@@ -31,57 +32,70 @@ def restore_inventory(order: models.Order) -> None:
         item.product.stock_quantity += item.quantity
 
 
-def customer_credit_status(db: Session, customer_id: int) -> schemas.CreditStatus:
-    now = datetime.now()
-    outstanding = db.scalars(
-        select(models.Order).where(
-            models.Order.customer_id == customer_id,
-            models.Order.payment_status == "pending",
-            models.Order.credit_due_at.is_not(None),
+def _transition_status(order: models.Order, new_status: str) -> None:
+    """Validate + apply a payment_status transition; restore inventory on terminal states."""
+    current_status = order.payment_status
+    if new_status == current_status:
+        return
+    if new_status not in ALLOWED_TRANSITIONS[current_status]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Payment status cannot change from {current_status} to {new_status}",
         )
+    if new_status in TERMINAL_STATUSES and current_status not in TERMINAL_STATUSES:
+        restore_inventory(order)
+    order.payment_status = new_status
+
+
+def compute_customer_credit(db: Session, customer: models.Customer) -> schemas.CreditStatus:
+    """Summarize all pending (tab/open) orders for a customer."""
+    today = date.today()
+    orders = db.scalars(
+        select(models.Order)
+        .where(
+            models.Order.customer_id == customer.customer_id,
+            models.Order.payment_status == "pending",
+        )
+        .order_by(models.Order.order_date.asc())
     ).all()
-    overdue = [order for order in outstanding if order.credit_due_at and order.credit_due_at < now]
+
+    overdue_ids: list[int] = []
+    outstanding = Decimal("0")
+    earliest_due_at: Optional[date] = None
+
+    for order in orders:
+        order_date = (
+            order.order_date.date()
+            if isinstance(order.order_date, datetime)
+            else order.order_date
+        )
+        days = 7
+        tab_note = ""
+        for item in order.items:
+            if item.customization:
+                tab_note += item.customization
+        match = re.search(r"\[Tab:\s*(\d+)\s*days\]", tab_note)
+        if match:
+            days = int(match.group(1))
+        due = order_date + timedelta(days=days)
+        if due < today:
+            overdue_ids.append(order.order_id)
+        outstanding += order.total_amount
+        if earliest_due_at is None or due < earliest_due_at:
+            earliest_due_at = due
+
     return schemas.CreditStatus(
-        customer_id=customer_id,
-        locked=bool(overdue),
-        overdue_orders=[order.order_id for order in overdue],
-        outstanding_amount=sum((Decimal(order.total_amount) for order in outstanding), Decimal("0.00")),
-        earliest_due_at=min((order.credit_due_at for order in outstanding if order.credit_due_at), default=None),
+        customer_id=customer.customer_id,
+        locked=bool(overdue_ids),
+        overdue_orders=overdue_ids,
+        outstanding_amount=outstanding,
+        earliest_due_at=earliest_due_at,
     )
 
 
 @router.post("", response_model=schemas.OrderRead, status_code=status.HTTP_201_CREATED)
-def create_order(
-    payload: schemas.OrderCreate, request: Request, db: Session = Depends(get_db)
-):
+def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
     get_or_404(db, models.Customer, payload.customer_id, "Customer")
-    session_customer_id = request.session.get("customer_id")
-    if session_customer_id is not None and session_customer_id != payload.customer_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Signed-in customers can only place orders on their own account",
-        )
-    if payload.payment_status == schemas.PaymentStatus.pending and session_customer_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="SEIUE login is required to open a tab",
-        )
-    credit = customer_credit_status(db, payload.customer_id)
-    if credit.locked:
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail="Account locked: an overdue tab must be paid before any new order",
-        )
-    if payload.payment_status == schemas.PaymentStatus.pending and payload.credit_days is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="credit_days is required for a tab and must be between 1 and 14",
-        )
-    if payload.payment_status == schemas.PaymentStatus.paid and payload.credit_days is not None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="credit_days can only be used when payment_status is pending",
-        )
     if payload.employee_id is not None:
         get_or_404(db, models.Employee, payload.employee_id, "Employee")
 
@@ -107,13 +121,9 @@ def create_order(
         customer_id=payload.customer_id,
         employee_id=payload.employee_id,
         pickup_time=payload.pickup_time,
+        payment_method=payload.payment_method.value,
         payment_status=payload.payment_status.value,
         total_amount=Decimal("0.00"),
-        credit_days=payload.credit_days,
-        credit_due_at=(datetime.now() + timedelta(days=payload.credit_days))
-        if payload.payment_status == schemas.PaymentStatus.pending and payload.credit_days
-        else None,
-        paid_at=datetime.now() if payload.payment_status == schemas.PaymentStatus.paid else None,
     )
     total = Decimal("0.00")
     for requested_item in payload.items:
@@ -154,6 +164,12 @@ def create_order(
     return order
 
 
+@router.get("/customers/{customer_id}/credit-status", response_model=schemas.CreditStatus)
+def get_customer_credit(customer_id: int, db: Session = Depends(get_db)):
+    customer = get_or_404(db, models.Customer, customer_id, "Customer")
+    return compute_customer_credit(db, customer)
+
+
 @router.get("", response_model=List[schemas.OrderRead])
 def list_orders(
     customer_id: Optional[int] = Query(default=None, gt=0),
@@ -177,10 +193,38 @@ def list_orders(
     ).all()
 
 
-@router.get("/customers/{customer_id}/credit-status", response_model=schemas.CreditStatus)
-def get_credit_status(customer_id: int, db: Session = Depends(get_db)):
-    get_or_404(db, models.Customer, customer_id, "Customer")
-    return customer_credit_status(db, customer_id)
+@router.get("/{order_id}", response_model=schemas.OrderRead)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    return get_or_404(db, models.Order, order_id, "Order")
+
+
+@router.post("/{order_id}/pay", response_model=schemas.OrderRead)
+def pay_order(
+    order_id: int,
+    payload: Optional[schemas.PaymentRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """Simulated payment gateway callback.
+
+    In production this endpoint would verify a signed webhook from the PSP
+    (WeChat / Alipay / Stripe). For now it flips a pending order to paid and
+    returns the updated order so the storefront can refresh its view.
+    """
+    order = get_or_404(db, models.Order, order_id, "Order")
+
+    if order.payment_status == schemas.PaymentStatus.paid.value:
+        return order
+
+    if order.payment_status != schemas.PaymentStatus.pending.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot pay an order in status '{order.payment_status}'",
+        )
+
+    _transition_status(order, schemas.PaymentStatus.paid.value)
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 @router.patch("/{order_id}", response_model=schemas.OrderRead)
@@ -196,48 +240,11 @@ def update_order(order_id: int, payload: schemas.OrderUpdate, db: Session = Depe
         order.pickup_time = changes["pickup_time"]
 
     if changes.get("payment_status") is not None:
-        new_status = changes["payment_status"].value
-        current_status = order.payment_status
-        if new_status != current_status:
-            if new_status not in ALLOWED_TRANSITIONS[current_status]:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Payment status cannot change from {current_status} to {new_status}",
-                )
-            if new_status in TERMINAL_STATUSES and current_status not in TERMINAL_STATUSES:
-                restore_inventory(order)
-            order.payment_status = new_status
-            if new_status == "paid":
-                order.paid_at = datetime.now()
+        _transition_status(order, changes["payment_status"].value)
 
     db.commit()
     db.refresh(order)
     return order
-
-
-@router.post("/{order_id}/pay", response_model=schemas.OrderRead)
-def pay_order(order_id: int, request: Request, db: Session = Depends(get_db)):
-    order = get_or_404(db, models.Order, order_id, "Order")
-    session_customer_id = request.session.get("customer_id")
-    if session_customer_id is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="SEIUE login required")
-    if session_customer_id != order.customer_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This tab belongs to another account")
-    if order.payment_status != "pending" or order.credit_due_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only an unpaid tab can be settled",
-        )
-    order.payment_status = "paid"
-    order.paid_at = datetime.now()
-    db.commit()
-    db.refresh(order)
-    return order
-
-
-@router.get("/{order_id}", response_model=schemas.OrderRead)
-def get_order(order_id: int, db: Session = Depends(get_db)):
-    return get_or_404(db, models.Order, order_id, "Order")
 
 
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)

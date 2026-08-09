@@ -55,9 +55,3 @@ def client():
         yield test_client
     finally:
         test_client.close()
-
-
-@pytest.fixture
-def authenticated_client(client):
-    """Attach the created customer's ID to the signed test session."""
-    return client
