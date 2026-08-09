@@ -7,6 +7,7 @@ a separate session store. For production, replace with a signed token
 """
 
 import base64
+import hashlib
 import json
 from datetime import date, datetime
 from typing import Optional
@@ -16,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.api.deps import ADMIN_COOKIE, is_admin, require_admin
 from app.api.orders import compute_customer_credit
 from app.database import get_db
 
@@ -24,6 +26,9 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 COOKIE_NAME = "whale_customer"
 COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
+
+_ADMIN_USER = "admin"
+_ADMIN_PASSWORD_HASH = hashlib.sha256(b"admin").hexdigest()
 
 
 def _encode_customer_id(customer_id: int) -> str:
@@ -123,3 +128,32 @@ def auth_me(request: Request, db: Session = Depends(get_db)):
 def logout(response: Response):
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return schemas.Message(message="Logged out")
+
+
+@router.post("/admin/login", response_model=schemas.Message)
+def admin_login(payload: schemas.ManualLoginRequest, response: Response):
+    if payload.email != _ADMIN_USER:
+        raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    provided = hashlib.sha256((payload.last_name or "").encode()).hexdigest()
+    if provided != _ADMIN_PASSWORD_HASH:
+        raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    response.set_cookie(
+        key=ADMIN_COOKIE,
+        value="1",
+        max_age=COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        samesite="lax",
+        httponly=True,
+    )
+    return schemas.Message(message="Admin logged in")
+
+
+@router.get("/admin/status")
+def admin_status(request: Request):
+    return {"authenticated": is_admin(request)}
+
+
+@router.post("/admin/logout", response_model=schemas.Message)
+def admin_logout(response: Response):
+    response.delete_cookie(key=ADMIN_COOKIE, path="/")
+    return schemas.Message(message="Admin logged out")

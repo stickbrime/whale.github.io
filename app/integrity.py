@@ -140,10 +140,14 @@ def _install_validation_triggers(connection) -> None:
 
 
 def _ensure_order_payment_method_column(connection) -> None:
-    """Add payment_method column to pre-existing orders table if missing."""
+    """Add payment_method + pickup_code columns to pre-existing orders table if missing."""
     rows = connection.exec_driver_sql("PRAGMA table_info(orders)").fetchall()
     existing = {r[1] for r in rows}
     if "payment_method" not in existing:
         connection.exec_driver_sql(
             "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(20) NOT NULL DEFAULT 'wechat'"
+        )
+    if "pickup_code" not in existing:
+        connection.exec_driver_sql(
+            "ALTER TABLE orders ADD COLUMN pickup_code VARCHAR(10) NULL"
         )

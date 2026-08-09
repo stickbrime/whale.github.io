@@ -1,6 +1,9 @@
 """Transactional order endpoints that calculate prices and maintain inventory."""
 
+import os
+import random
 import re
+import string
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
@@ -8,9 +11,10 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
+from app.api.deps import require_admin
 from app.api.common import get_or_404
 from app.database import get_db
 
@@ -25,6 +29,12 @@ ALLOWED_TRANSITIONS: Dict[str, set] = {
     "refunded": set(),
     "cancelled": set(),
 }
+CREDIT_LIMIT = Decimal("100.00")
+_PICKUP_ALPHABET = "".join(c for c in string.ascii_uppercase + string.digits if c not in "0OI1")
+
+
+def _generate_pickup_code(n: int = 6) -> str:
+    return "".join(random.choice(_PICKUP_ALPHABET) for _ in range(n))
 
 
 def restore_inventory(order: models.Order) -> None:
@@ -86,7 +96,7 @@ def compute_customer_credit(db: Session, customer: models.Customer) -> schemas.C
 
     return schemas.CreditStatus(
         customer_id=customer.customer_id,
-        locked=bool(overdue_ids),
+        locked=bool(overdue_ids) or outstanding >= CREDIT_LIMIT,
         overdue_orders=overdue_ids,
         outstanding_amount=outstanding,
         earliest_due_at=earliest_due_at,
@@ -95,9 +105,21 @@ def compute_customer_credit(db: Session, customer: models.Customer) -> schemas.C
 
 @router.post("", response_model=schemas.OrderRead, status_code=status.HTTP_201_CREATED)
 def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
-    get_or_404(db, models.Customer, payload.customer_id, "Customer")
+    customer = get_or_404(db, models.Customer, payload.customer_id, "Customer")
     if payload.employee_id is not None:
         get_or_404(db, models.Employee, payload.employee_id, "Employee")
+
+    credit = compute_customer_credit(db, customer)
+    if credit.locked:
+        reason = (
+            f"overdue orders {credit.overdue_orders}"
+            if credit.overdue_orders
+            else f"outstanding balance ${credit.outstanding_amount}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Customer is locked ({reason}). Settle the tab before ordering again.",
+        )
 
     product_ids = [item.product_id for item in payload.items]
     if len(product_ids) != len(set(product_ids)):
@@ -123,6 +145,7 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
         pickup_time=payload.pickup_time,
         payment_method=payload.payment_method.value,
         payment_status=payload.payment_status.value,
+        pickup_code=_generate_pickup_code(),
         total_amount=Decimal("0.00"),
     )
     total = Decimal("0.00")
@@ -178,8 +201,9 @@ def list_orders(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
 ):
-    query = select(models.Order)
+    query = select(models.Order).options(selectinload(models.Order.customer))
     if customer_id is not None:
         query = query.where(models.Order.customer_id == customer_id)
     if employee_id is not None:
@@ -196,6 +220,34 @@ def list_orders(
 @router.get("/{order_id}", response_model=schemas.OrderRead)
 def get_order(order_id: int, db: Session = Depends(get_db)):
     return get_or_404(db, models.Order, order_id, "Order")
+
+
+@router.post("/customers/{customer_id}/settle-all", response_model=List[schemas.OrderRead])
+def settle_all_customer_orders(customer_id: int, db: Session = Depends(get_db)):
+    """Settle every pending order for a customer in one call.
+
+    Used by the account page to clear the tab and unlock ordering.
+    Returns the orders that were just transitioned to paid.
+    """
+    customer = get_or_404(db, models.Customer, customer_id, "Customer")
+    pending = db.scalars(
+        select(models.Order).where(
+            models.Order.customer_id == customer_id,
+            models.Order.payment_status == "pending",
+        )
+    ).all()
+
+    updated: list[models.Order] = []
+    for order in pending:
+        _transition_status(order, "paid")
+        if not order.pickup_code:
+            order.pickup_code = _generate_pickup_code()
+        updated.append(order)
+
+    db.commit()
+    for order in updated:
+        db.refresh(order)
+    return updated
 
 
 @router.post("/{order_id}/pay", response_model=schemas.OrderRead)
@@ -222,13 +274,15 @@ def pay_order(
         )
 
     _transition_status(order, schemas.PaymentStatus.paid.value)
+    if not order.pickup_code:
+        order.pickup_code = _generate_pickup_code()
     db.commit()
     db.refresh(order)
     return order
 
 
 @router.patch("/{order_id}", response_model=schemas.OrderRead)
-def update_order(order_id: int, payload: schemas.OrderUpdate, db: Session = Depends(get_db)):
+def update_order(order_id: int, payload: schemas.OrderUpdate, db: Session = Depends(get_db), _: None = Depends(require_admin)):
     order = get_or_404(db, models.Order, order_id, "Order")
     changes = payload.model_dump(exclude_unset=True)
 

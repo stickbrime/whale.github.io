@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.api.deps import require_admin
 from app.api.common import commit_or_conflict, get_or_404
 from app.database import get_db
 
@@ -19,7 +20,7 @@ def require_category(db: Session, category_id: int) -> None:
 
 
 @router.post("", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED)
-def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db)):
+def create_product(payload: schemas.ProductCreate, db: Session = Depends(get_db), _: None = Depends(require_admin)):
     require_category(db, payload.category_id)
     product = models.Product(**payload.model_dump())
     db.add(product)
@@ -59,7 +60,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{product_id}", response_model=schemas.ProductRead)
 def update_product(
-    product_id: int, payload: schemas.ProductUpdate, db: Session = Depends(get_db)
+    product_id: int, payload: schemas.ProductUpdate, db: Session = Depends(get_db), _: None = Depends(require_admin)
 ):
     product = get_or_404(db, models.Product, product_id, "Product")
     changes = payload.model_dump(exclude_unset=True)
@@ -74,7 +75,7 @@ def update_product(
 
 @router.patch("/{product_id}/stock", response_model=schemas.StockResponse)
 def adjust_stock(
-    product_id: int, payload: schemas.StockAdjustment, db: Session = Depends(get_db)
+    product_id: int, payload: schemas.StockAdjustment, db: Session = Depends(get_db), _: None = Depends(require_admin)
 ):
     product = get_or_404(db, models.Product, product_id, "Product")
     new_quantity = product.stock_quantity + payload.quantity_change
@@ -92,7 +93,7 @@ def adjust_stock(
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_product(product_id: int, db: Session = Depends(get_db)) -> Response:
+def delete_product(product_id: int, db: Session = Depends(get_db), _: None = Depends(require_admin)) -> Response:
     product = get_or_404(db, models.Product, product_id, "Product")
     db.delete(product)
     commit_or_conflict(db, "Products referenced by order history cannot be deleted")

@@ -33,6 +33,7 @@ export const api = {
   authStatus: () => request<AuthStatus>('/auth/me'),
   logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
   payOrder: (id: number) => request<Order>(`/orders/${id}/pay`, { method: 'POST' }),
+  settleAll: (customerId: number) => request<Order[]>(`/orders/customers/${customerId}/settle-all`, { method: 'POST' }),
   createCustomer: (data: Pick<Customer, 'first_name' | 'last_name' | 'email' | 'phone'>) =>
     request<Customer>('/customers', { method: 'POST', body: JSON.stringify(data) }),
   updateCustomer: (id: number, data: Partial<Customer>) =>
@@ -40,9 +41,33 @@ export const api = {
   createOrder: (data: {
     customer_id: number
     pickup_time?: string
-    payment_method: 'cash' | 'wechat' | 'alipay' | 'card'
+    payment_method: 'cash' | 'wechat' | 'alipay'
     payment_status: 'pending' | 'paid'
     credit_days?: number
     items: Array<{ product_id: number; quantity: number; customization?: string }>
-  }) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) })
+  }) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) }),
+
+  adminLogin: (email: string, password: string) =>
+    request<{ message: string }>('/auth/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, last_name: password }),
+    }),
+  adminStatus: () => request<{ authenticated: boolean }>('/auth/admin/status'),
+  adminLogout: () =>
+    request<{ message: string }>('/auth/admin/logout', { method: 'POST' }),
+
+  // Admin-only data endpoints
+  allOrders: (status?: string) => request<Order[]>(status ? `/orders?payment_status=${status}&limit=200` : '/orders?limit=200'),
+  updateOrderStatus: (id: number, payment_status: string) =>
+    request<Order>(`/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ payment_status }) }),
+  createProduct: (data: Omit<Product, 'product_id'>) =>
+    request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
+  updateProduct: (id: number, data: Partial<Product>) =>
+    request<Product>(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProduct: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
+  adjustStock: (id: number, quantity_change: number) =>
+    request<{ product_id: number; stock_quantity: number }>(`/products/${id}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity_change })
+    })
 }

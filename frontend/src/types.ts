@@ -39,8 +39,10 @@ export type Order = {
   total_amount: string
   payment_method: 'cash' | 'wechat' | 'alipay' | 'card'
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled'
+  pickup_code: string | null
   pickup_time: string | null
   customer_id: number
+  customer_name: string | null
   employee_id: number | null
   credit_days: number | null
   credit_due_at: string | null

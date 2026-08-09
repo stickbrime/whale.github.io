@@ -97,6 +97,7 @@ class Order(Base):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(20), default="wechat", nullable=False)
     payment_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    pickup_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     pickup_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     customer_id: Mapped[int] = mapped_column(
         ForeignKey("customers.customer_id", ondelete="RESTRICT"), nullable=False, index=True
@@ -113,6 +114,12 @@ class Order(Base):
         passive_deletes=True,
         lazy="selectin",
     )
+
+    @property
+    def customer_name(self) -> Optional[str]:
+        if self.customer is None:
+            return None
+        return f"{self.customer.first_name} {self.customer.last_name}"
 
     __table_args__ = (
         CheckConstraint("total_amount >= 0", name="ck_order_total_nonnegative"),

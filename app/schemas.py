@@ -164,8 +164,10 @@ class OrderRead(ORMModel):
     total_amount: Decimal
     payment_method: PaymentMethod
     payment_status: PaymentStatus
+    pickup_code: Optional[str] = None
     pickup_time: Optional[time]
     customer_id: int
+    customer_name: Optional[str] = None
     employee_id: Optional[int]
     items: List[OrderItemRead]
 

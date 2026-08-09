@@ -10,7 +10,6 @@ import {
   CircleUserRound,
   Clock3,
   Coffee,
-  CreditCard,
   Eye,
   Globe2,
   Heart,
@@ -89,11 +88,15 @@ function App() {
     ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
     : path === '/cart'
     ? <CartPage t={t} cart={cart} setCart={setCart} />
+    : path === '/settle'
+    ? <SettlePage t={t} customer={auth?.customer ?? null} customerId={customerId} auth={auth} refreshAuth={refreshAuth} />
     : path === '/checkout'
       ? <CheckoutPage t={t} cart={cart} clearCart={() => setCart([])} customerId={customerId} setCustomerId={setCustomerId} auth={auth} />
       : path === '/account'
         ? <AccountPage t={t} customerId={customerId} setCustomerId={setCustomerId} auth={auth} refreshAuth={refreshAuth} />
-        : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
+        : path === '/admin'
+          ? <AdminPage t={t} />
+          : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
 
   return (
     <div className="app-shell" lang={language === 'zh' ? 'zh-CN' : 'en'}>
@@ -122,6 +125,7 @@ function Header({ t, itemCount, onSettings }: { t: any; itemCount: number; onSet
     { to: '/', label: t.order },
     { to: '/shop', label: t.shop },
     { to: '/cart', label: t.cart },
+    { to: '/settle', label: t.settle },
     { to: '/account', label: t.account }
   ]
   return (
@@ -285,7 +289,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
   const [form, setForm] = useState({ first_name: '', last_name: '', email: '', phone: '' })
   const [pickup, setPickup] = useState('10:30')
   const [payment, setPayment] = useState<'paid' | 'pending'>('paid')
-  const [paymentMethod, setPaymentMethod] = useState<BackendPayMethod>('card')
+  const [paymentMethod, setPaymentMethod] = useState<BackendPayMethod>('cash')
   const [creditDays, setCreditDays] = useState(7)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -356,7 +360,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
     finally { setSubmitting(false) }
   }
 
-  if (confirmed) return <section className="page-section"><div className="container confirmation"><div className="confirmation-mark"><Check /></div><span className="eyebrow">{t.orderNumber} #{confirmed.order_id}</span><h1>{t.orderReady}</h1><p>{t.orderReadySub}</p><div className="confirmation-detail"><Clock3 /><div><span>{t.pickup}</span><strong>{confirmed.pickup_time?.slice(0, 5) ?? 'ASAP'}</strong></div><div className="detail-divider" /><CreditCard /><div><span>{t.payment}</span><strong>{payment === 'pending' ? `${t.payLater} · ${creditDays} ${t.days}` : t.payNow}</strong></div></div><button className="button button-dark" onClick={() => navigate('/account')}>{t.goAccount}<ArrowRight size={17} /></button></div></section>
+  if (confirmed) return <section className="page-section"><div className="container confirmation"><div className="confirmation-mark"><Check /></div><span className="eyebrow">{t.orderNumber} #{confirmed.order_id}</span><h1>{t.orderReady}</h1><p>{t.orderReadySub}</p>{confirmed.pickup_code && <div className="confirmation-pickup"><span>{t.pickupCode ?? 'Pickup code'}</span><strong>{confirmed.pickup_code}</strong></div>}<div className="confirmation-detail"><Clock3 /><div><span>{t.pickup}</span><strong>{confirmed.pickup_time?.slice(0, 5) ?? 'ASAP'}</strong></div><div className="detail-divider" /><Banknote /><div><span>{t.payment}</span><strong>{payment === 'pending' ? `${t.payLater} · ${creditDays} ${t.days}` : t.payNow}</strong></div></div><button className="button button-dark" onClick={() => navigate('/account')}>{t.goAccount}<ArrowRight size={17} /></button></div></section>
   if (!cart.length) return <Navigate to="/cart" replace />
   if (auth?.credit?.locked) return <section className="page-section"><div className="container"><LockBanner t={t} /><div className="empty-state"><LockKeyhole /><h2>{t.accountLocked}</h2><p>{t.accessLocked}</p><Link className="button button-dark" to="/account">{t.settleNow}</Link></div></div></section>
 
@@ -369,7 +373,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
         </section>
         <section className="form-card"><div className="numbered-title"><span>02</span><div><h2>{t.pickup}</h2><p>{t.collectionTime}</p></div></div><label className="time-field"><Clock3 /><input type="time" value={pickup} onChange={e => setPickup(e.target.value)} required /></label></section>
         <section className="form-card"><div className="numbered-title"><span>03</span><div><h2>{t.payment}</h2><p>{t.checkoutSub}</p></div></div>
-          <div className="payment-options"><button type="button" className={payment === 'paid' ? 'payment-option selected' : 'payment-option'} onClick={() => setPayment('paid')}><span className="payment-icon"><CreditCard /></span><span><strong>{t.payNow}</strong><small>{t.payNowSub}</small></span><span className="radio-dot" /></button><button type="button" disabled={!auth?.authenticated} className={payment === 'pending' ? 'payment-option selected' : 'payment-option'} onClick={() => setPayment('pending')}><span className="payment-icon"><Banknote /></span><span><strong>{t.payLater} <em>赊账</em></strong><small>{auth?.authenticated ? t.payLaterSub : t.loginRequired}</small></span><span className="radio-dot" /></button></div>
+          <div className="payment-options"><button type="button" className={payment === 'paid' ? 'payment-option selected' : 'payment-option'} onClick={() => setPayment('paid')}><span className="payment-icon"><Banknote /></span><span><strong>{t.payNow}</strong><small>{t.payNowSub}</small></span><span className="radio-dot" /></button><button type="button" disabled={!auth?.authenticated} className={payment === 'pending' ? 'payment-option selected' : 'payment-option'} onClick={() => setPayment('pending')}><span className="payment-icon"><Banknote /></span><span><strong>{t.payLater} <em>赊账</em></strong><small>{auth?.authenticated ? t.payLaterSub : t.loginRequired}</small></span><span className="radio-dot" /></button></div>
           {payment === 'pending' && <div className="credit-terms"><div><strong>{t.tabLength}</strong><span>{creditDays} {t.days}</span></div><input type="range" min="1" max="14" step="1" value={creditDays} onChange={e => setCreditDays(Number(e.target.value))} /><div className="range-labels"><span>1 {t.days}</span><span>7 {t.days}</span><span>14 {t.days}</span></div><small>{t.maxTwoWeeks}</small><p><ShieldCheck size={15} /> {t.dueOn} {new Date(Date.now() + creditDays * 86400000).toLocaleDateString()}.</p></div>}
         </section>
       </div>
@@ -387,6 +391,7 @@ function AccountPage({ t, customerId, setCustomerId, auth, refreshAuth }: { t: a
   const [privacy, setPrivacy] = useStoredState('whale-privacy', { recommendations: true, marketing: false, publicProfile: false })
   const [saved, setSaved] = useState(false)
   const [settling, setSettling] = useState<number | null>(null)
+  const [settlingAll, setSettlingAll] = useState(false)
   const [loginEmail, setLoginEmail] = useState('')
   const [loginFirst, setLoginFirst] = useState('')
   const [loginLast, setLoginLast] = useState('')
@@ -408,6 +413,19 @@ function AccountPage({ t, customerId, setCustomerId, auth, refreshAuth }: { t: a
     }
   }
 
+  const handleSettleAll = useCallback(async () => {
+    if (!customer) return
+    setSettlingAll(true)
+    try {
+      await api.settleAll(customer.customer_id)
+      await refreshAuth()
+      const history = await api.customerOrders(customer.customer_id)
+      setOrders(history)
+    } finally {
+      setSettlingAll(false)
+    }
+  }, [customer, refreshAuth])
+
   useEffect(() => { if (auth?.authenticated && auth.customer) { setCustomers([auth.customer]); setCustomerId(auth.customer.customer_id) } else { setCustomers([]); setLoading(false) } }, [auth])
   useEffect(() => {
     if (!customerId) { setLoading(false); return }
@@ -418,9 +436,9 @@ function AccountPage({ t, customerId, setCustomerId, auth, refreshAuth }: { t: a
 
   return <section className="page-section account-page"><div className="container">
     <div className="account-heading"><PageTitle eyebrow="WHALE MEMBER" title={t.accountTitle} subtitle={t.accountSub} />{auth?.authenticated && <button className="text-button" onClick={async () => { await api.logout(); setCustomerId(null); await refreshAuth() }}>{t.logout}</button>}</div>
-    {!auth?.authenticated ? <div className="login-card"><div className="login-logo"><ShieldCheck /></div><h2>{t.loginSeiue}</h2><p>{t.loginRequired}</p>{auth?.configured ? <form className="manual-login" onSubmit={handleLogin}><input type="email" placeholder={t.email} value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /><input type="text" placeholder={t.firstName + (t.loginNewHint ? ' · ' + t.loginNewHint : '')} value={loginFirst} onChange={e => setLoginFirst(e.target.value)} /><input type="text" placeholder={t.lastName} value={loginLast} onChange={e => setLoginLast(e.target.value)} />{loginErr && <small className="login-error">{loginErr}</small>}<button type="submit" className="button button-dark" disabled={loggingIn}>{loggingIn ? t.placing : t.loginSeiue}<ArrowRight /></button></form> : <div className="login-unconfigured">{t.loginNotConfigured}</div>}</div> : loading ? <LoadingBlock text={t.brewing} /> : !customer ? <LoadingBlock text={t.brewing} /> : <><div className="account-grid">
-      <aside className="profile-card"><div className="large-avatar">{customer.first_name[0]}{customer.last_name[0]}<span><BadgeCheck /></span></div><h2>{customer.first_name} {customer.last_name}</h2><p>{customer.email}</p><div className="profile-stat"><span><Sparkles />{t.loyalty}</span><strong>{customer.loyalty_points}</strong></div><div className="profile-stat"><span><Clock3 />{t.memberSince}</span><strong>{new Date(customer.join_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</strong></div></aside>
-      <div className="account-content">{auth.credit?.locked && <LockBanner t={t} credit={auth.credit} />}<section className="account-panel"><div className="panel-heading"><div><span className="eyebrow">HISTORY</span><h2>{t.activity}</h2></div><Coffee /></div>{orders.length === 0 ? <div className="activity-empty"><Coffee /><p>{t.noActivity}</p></div> : <div className="activity-list">{orders.map(order => <article className="activity-row" key={order.order_id}><div className="activity-icon"><ShoppingBag /></div><div className="activity-copy"><div><strong>{t.orderNumber} #{order.order_id}</strong><StatusPill status={order.payment_status} t={t} /></div><p>{order.items.map(item => `${item.quantity}× ${item.product.product_name}`).join(' · ')}</p><small>{new Date(order.order_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}{order.credit_due_at && ` · ${t.due}: ${new Date(order.credit_due_at).toLocaleDateString()}`}</small></div><div className="activity-price"><strong>${Number(order.total_amount).toFixed(2)}</strong>{order.payment_status === 'pending' && order.credit_due_at && <button disabled={settling === order.order_id} onClick={async () => { setSettling(order.order_id); await api.payOrder(order.order_id); await refreshAuth(); const history = await api.customerOrders(customer.customer_id); setOrders(history); setSettling(null) }}>{settling === order.order_id ? t.settling : t.settleNow}</button>}</div></article>)}</div>}</section>
+    {!auth?.authenticated ? <div className="login-card"><div className="login-hero"><div className="login-logo"><ShieldCheck size={28} /></div><div><h2>{t.loginSeiue}</h2><p>{t.loginRequired}</p></div></div>{auth === null ? <div className="login-unconfigured"><LoaderCircle className="spin" /> Loading…</div> : auth.configured ? <form className="manual-login" onSubmit={handleLogin}><label className="login-field"><span>{t.email}</span><input type="email" placeholder="you@whale.coffee" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /></label><div className="login-name-grid"><label className="login-field"><span>{t.firstName}</span><input type="text" placeholder={t.firstName} value={loginFirst} onChange={e => setLoginFirst(e.target.value)} /></label><label className="login-field"><span>{t.lastName}</span><input type="text" placeholder={t.lastName} value={loginLast} onChange={e => setLoginLast(e.target.value)} /></label></div>{t.loginNewHint && <small className="login-hint">{t.loginNewHint}</small>}{loginErr && <div className="login-error">{loginErr}</div>}<button type="submit" className="button button-dark login-submit" disabled={loggingIn}>{loggingIn ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.loginSeiue}<ArrowRight /></>}</button></form> : <div className="login-unconfigured">{t.loginNotConfigured}</div>}</div> : loading ? <LoadingBlock text={t.brewing} /> : !customer ? <LoadingBlock text={t.brewing} /> : <><div className="account-grid">
+      <aside className="profile-card"><div className="large-avatar">{customer.first_name[0]}{customer.last_name[0]}<span><BadgeCheck /></span></div><h2>{customer.first_name} {customer.last_name}</h2><p>{customer.email}</p><div className="profile-stat"><span><Sparkles />{t.loyalty}</span><strong>{customer.loyalty_points}</strong></div><div className="profile-stat"><span><Clock3 />{t.memberSince}</span><strong>{new Date(customer.join_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</strong></div><div className="profile-stat"><span><Banknote />{t.tabTotal ?? 'Tab total'}</span><strong className={auth.credit?.locked ? 'locked-amount' : ''}>${Number(auth.credit?.outstanding_amount ?? 0).toFixed(2)}</strong></div>{auth.credit?.locked && <div className="profile-lock-hint"><LockKeyhole size={14} />{t.tabLocked ?? 'Locked: tab over $100'}</div>}{auth.credit?.outstanding_amount ? <button className="button button-dark profile-settle-btn" disabled={settlingAll} onClick={handleSettleAll}>{settlingAll ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <><Banknote />{t.settleAll}</>}</button> : null}</aside>
+      <div className="account-content">{auth.credit?.locked && <LockBanner t={t} credit={auth.credit} settleAll={handleSettleAll} settling={settlingAll} />}<section className="account-panel"><div className="panel-heading"><div><span className="eyebrow">HISTORY</span><h2>{t.activity}</h2></div><Coffee /></div>{orders.length === 0 ? <div className="activity-empty"><Coffee /><p>{t.noActivity}</p></div> : <div className="activity-list">{orders.map(order => <article className="activity-row" key={order.order_id}><div className="activity-icon"><ShoppingBag /></div><div className="activity-copy"><div><strong>{t.orderNumber} #{order.order_id}</strong><StatusPill status={order.payment_status} t={t} />{order.pickup_code && <span className="pickup-chip">{t.pickupCode ?? 'Pickup'} · {order.pickup_code}</span>}</div><p>{order.items.map(item => `${item.quantity}× ${item.product.product_name}`).join(' · ')}</p><small>{new Date(order.order_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}{order.credit_due_at && ` · ${t.due}: ${new Date(order.credit_due_at).toLocaleDateString()}`}</small></div><div className="activity-price"><strong>${Number(order.total_amount).toFixed(2)}</strong>{order.payment_status === 'pending' && order.credit_due_at && <button disabled={settling === order.order_id} onClick={async () => { setSettling(order.order_id); await api.payOrder(order.order_id); await refreshAuth(); const history = await api.customerOrders(customer.customer_id); setOrders(history); setSettling(null) }}>{settling === order.order_id ? t.settling : t.settleNow}</button>}</div></article>)}</div>}</section>
         <section className="account-panel privacy-panel"><div className="panel-heading"><div><span className="eyebrow">CONTROL</span><h2>{t.privacy}</h2><p>{t.privacySub}</p></div><ShieldCheck /></div><PrivacyToggle icon={<Sparkles />} title={t.recommendations} text={t.recommendationsSub} checked={privacy.recommendations} onChange={checked => setPrivacy({ ...privacy, recommendations: checked })} /><PrivacyToggle icon={<Bell />} title={t.marketing} text={t.marketingSub} checked={privacy.marketing} onChange={checked => setPrivacy({ ...privacy, marketing: checked })} /><PrivacyToggle icon={<Eye />} title={t.profileVisibility} text={t.profileVisibilitySub} checked={privacy.publicProfile} onChange={checked => setPrivacy({ ...privacy, publicProfile: checked })} /><button className="button button-dark save-privacy" onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 1800) }}>{saved ? <><Check />{t.saved}</> : t.save}</button></section>
       </div>
     </div></>}
@@ -431,61 +449,390 @@ function SettingsPanel({ open, onClose, language, setLanguage, t }: { open: bool
   return <div className={open ? 'settings-layer open' : 'settings-layer'} aria-hidden={!open}><button className="settings-backdrop" onClick={onClose} aria-label={t.close} /><aside className="settings-drawer"><div className="drawer-head"><div><span className="eyebrow">WHALE</span><h2>{t.settingsTitle}</h2></div><button className="icon-button" onClick={onClose}><X /></button></div><div className="settings-group"><div className="settings-label"><Globe2 /><div><h3>{t.language}</h3><p>{t.languageSub}</p></div></div><div className="language-options"><button className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}><span>EN</span><div><strong>{t.english}</strong><small>English</small></div>{language === 'en' && <Check />}</button><button className={language === 'zh' ? 'selected' : ''} onClick={() => setLanguage('zh')}><span>中</span><div><strong>{t.chinese}</strong><small>Chinese</small></div>{language === 'zh' && <Check />}</button></div></div><div className="settings-row"><span className="settings-row-icon"><Sparkles /></span><div><strong>{t.appearance}</strong><small>{t.systemTheme}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><ShieldCheck /></span><div><strong>{t.privacy}</strong><small>{t.privacySub}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><CircleUserRound /></span><div><strong>{t.help}</strong><small>hello@whale.coffee</small></div><ChevronRight /></div><div className="drawer-footer"><Coffee /><span>Whale v1.0</span></div></aside></div>
 }
 
-function Footer({ t }: { t: any }) { return <footer><div className="container footer-inner"><Link className="brand footer-brand" to="/"><span className="brand-mark"><Coffee size={18} /></span>WHALE</Link><p>{t.thoughtfulCoffee}</p><nav><Link to="/">{t.order}</Link><Link to="/shop">{t.shop}</Link><Link to="/account">{t.account}</Link><a href="/docs">API</a></nav><span>© {new Date().getFullYear()} Whale</span></div></footer> }
-function LockBanner({ t, credit }: { t: any; credit?: CreditStatus | null }) { return <div className="lock-banner"><span><LockKeyhole /></span><div><strong>{t.accountLocked}</strong><p>{t.accountLockedSub}</p></div>{credit && <div className="lock-amount"><small>{t.overdueBalance}</small><strong>${Number(credit.outstanding_amount).toFixed(2)}</strong></div>}<Link to="/account">{t.settleNow}<ArrowRight /></Link></div> }
+function Footer({ t }: { t: any }) { return <footer><div className="container footer-inner"><Link className="brand footer-brand" to="/"><span className="brand-mark"><Coffee size={18} /></span>WHALE</Link><p>{t.thoughtfulCoffee}</p><nav><Link to="/">{t.order}</Link><Link to="/shop">{t.shop}</Link><Link to="/settle">{t.settle}</Link><Link to="/account">{t.account}</Link><a href="/docs">API</a></nav><span>© {new Date().getFullYear()} Whale</span></div></footer> }
+function LockBanner({ t, credit, settleAll, settling }: { t: any; credit?: CreditStatus | null; settleAll?: () => Promise<void>; settling?: boolean }) { return <div className="lock-banner"><span><LockKeyhole /></span><div><strong>{t.accountLocked}</strong><p>{t.accountLockedSub}</p></div>{credit && <div className="lock-amount"><small>{t.overdueBalance}</small><strong>${Number(credit.outstanding_amount).toFixed(2)}</strong></div>}{settleAll ? <button className="button button-dark" disabled={settling} onClick={settleAll}>{settling ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <>{t.settleAll}<ArrowRight /></>}</button> : <Link to="/account">{t.settleNow}<ArrowRight /></Link>}</div> }
 
-type PayMethod = 'card' | 'wechat' | 'alipay'
+function SettlePage({ t, customer, customerId, auth, refreshAuth }: { t: any; customer: Customer | null; customerId: number | null; auth: AuthStatus | null; refreshAuth: () => Promise<void> }) {
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [settlingOne, setSettlingOne] = useState<number | null>(null)
+  const [settlingAll, setSettlingAll] = useState(false)
+
+  useEffect(() => {
+    if (!customerId) { setOrders([]); setLoading(false); return }
+    let alive = true
+    api.customerOrders(customerId).then(list => { if (alive) setOrders(list) }).finally(() => alive && setLoading(false))
+    return () => { alive = false }
+  }, [customerId])
+
+  const pending = orders.filter(o => o.payment_status === 'pending')
+  const locked = Boolean(auth?.credit?.locked)
+  const outstanding = Number(auth?.credit?.outstanding_amount ?? pending.reduce((s, o) => s + Number(o.total_amount), 0))
+
+  const settleOne = useCallback(async (id: number) => {
+    setSettlingOne(id)
+    try {
+      await api.payOrder(id)
+      const list = customerId ? await api.customerOrders(customerId) : []
+      setOrders(list)
+      await refreshAuth()
+    } finally {
+      setSettlingOne(null)
+    }
+  }, [customerId, refreshAuth])
+
+  const settleAll = useCallback(async () => {
+    if (!customerId) return
+    setSettlingAll(true)
+    try {
+      await api.settleAll(customerId)
+      const list = await api.customerOrders(customerId)
+      setOrders(list)
+      await refreshAuth()
+    } finally {
+      setSettlingAll(false)
+    }
+  }, [customerId, refreshAuth])
+
+  if (!customer) return <div className="page-section"><div className="container narrow-page settle-empty"><CircleUserRound size={40} /><h1>{t.settleTitle}</h1><p>{t.settleSignInHint ?? 'Sign in to view and settle your tab.'}</p><Link to="/account" className="button button-dark">{t.signIn ?? 'Sign in'}<ArrowRight /></Link></div></div>
+
+  return <div className="page-section"><div className="container narrow-page"><div className="page-title"><span className="eyebrow">SETTLE</span><h1>{t.settleTitle}</h1><p>{t.settleSubtitle ?? 'Pay off your tab and unlock ordering.'}</p></div>
+  {locked && <LockBanner t={t} credit={auth?.credit} settleAll={settleAll} settling={settlingAll} />}
+  <div className="settle-layout">
+    <section className="settle-panel">
+      <div className="settle-summary">
+        <div className="settle-summary-row"><span>{t.settleOutstanding ?? 'Outstanding balance'}</span><strong className={locked ? 'locked-amount' : ''}>${outstanding.toFixed(2)}</strong></div>
+        <div className="settle-summary-row muted"><span>{t.settlePendingCount ?? 'Pending orders'}</span><strong>{pending.length}</strong></div>
+        {auth?.credit?.overdue_orders?.length ? <div className="settle-summary-row muted"><span><Clock3 size={14} />{t.settleOverdue ?? 'Overdue'}</span><strong className="locked-amount">{auth.credit.overdue_orders.length}</strong></div> : null}
+      </div>
+      {loading ? <div className="settle-empty-mini"><LoaderCircle className="spin" /></div> : pending.length === 0 ? <div className="settle-clear"><Check size={28} /><strong>{t.settleAllClear ?? 'All settled'}</strong><p>{t.settleAllClearSub ?? 'No pending orders on your tab.'}</p></div> :
+      <div className="settle-list">
+        {pending.map(o => (
+          <div key={o.order_id} className="settle-row">
+            <div className="settle-row-copy">
+              <strong>#{o.order_id} · {o.items.reduce((s, it) => s + it.quantity, 0)} {t.items}</strong>
+              <small>{new Date(o.order_date).toLocaleDateString()}{o.items.length > 0 && ` · ${o.items.map(i => i.product.product_name).join(', ')}`}</small>
+            </div>
+            <strong className="settle-row-price">${Number(o.total_amount).toFixed(2)}</strong>
+            <button className="button button-dark button-mini" disabled={settlingOne === o.order_id} onClick={() => settleOne(o.order_id)}>{settlingOne === o.order_id ? <LoaderCircle className="spin" /> : t.settleOne ?? 'Settle'}</button>
+          </div>
+        ))}
+      </div>}
+    </section>
+    <aside className="settle-total-card">
+      <div className="settle-total-amount"><span>{t.settleTotalLabel ?? 'Total to pay'}</span><strong>${outstanding.toFixed(2)}</strong></div>
+      <button className="button button-dark settle-all-btn" disabled={settlingAll || pending.length === 0} onClick={settleAll}>
+        {settlingAll ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <><Banknote />{t.settleAll}</>}
+      </button>
+      <p className="settle-note">{t.settleNote ?? 'Click to record cash payment. Orders will be marked paid and you\'ll receive pickup codes.'}</p>
+    </aside>
+  </div></div></div>
+}
+
+function AdminPage({ t }: { t: any }) {
+  const [adminAuthed, setAdminAuthed] = useState(false)
+  const [adminChecking, setAdminChecking] = useState(true)
+  const [loginUser, setLoginUser] = useState('')
+  const [loginPass, setLoginPass] = useState('')
+  const [loginErr, setLoginErr] = useState('')
+  const [tab, setTab] = useState<'orders' | 'products'>('orders')
+  const [orders, setOrders] = useState<Order[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [loading, setLoading] = useState(true)
+  const [orderBusy, setOrderBusy] = useState<number | null>(null)
+  const [productBusy, setProductBusy] = useState<number | null>(null)
+  const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '' })
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    api.adminStatus().then(s => setAdminAuthed(s.authenticated)).catch(() => setAdminAuthed(false)).finally(() => setAdminChecking(false))
+  }, [])
+
+  const handleAdminLogin = async (e: FormEvent) => {
+    e.preventDefault()
+    setLoginErr('')
+    try {
+      await api.adminLogin(loginUser, loginPass)
+      setAdminAuthed(true)
+      setLoginUser(''); setLoginPass('')
+    } catch (err: any) {
+      setLoginErr(err.message || 'Login failed')
+    }
+  }
+  const handleAdminLogout = async () => {
+    await api.adminLogout()
+    setAdminAuthed(false)
+    setOrders([]); setProducts([])
+  }
+
+  const refreshOrders = useCallback(async (filter = statusFilter) => {
+    const list = filter === 'all' ? await api.allOrders() : await api.allOrders(filter)
+    setOrders(list)
+  }, [statusFilter])
+
+  const refreshProducts = useCallback(async () => {
+    const [plist, clist] = await Promise.all([api.products(), api.categories()])
+    setProducts(plist)
+    setCategories(clist)
+  }, [])
+
+  useEffect(() => {
+    if (!adminAuthed) return
+    setLoading(true)
+    Promise.all([refreshOrders(), refreshProducts()]).finally(() => setLoading(false))
+  }, [adminAuthed])
+
+  useEffect(() => { if (adminAuthed) refreshOrders() }, [statusFilter])
+
+  const totalRevenue = orders.filter(o => o.payment_status === 'paid').reduce((s, o) => s + Number(o.total_amount), 0)
+  const pendingCount = orders.filter(o => o.payment_status === 'pending').length
+  const lowStock = products.filter(p => p.stock_quantity < 10).length
+
+  const handleSettle = async (id: number) => {
+    setOrderBusy(id)
+    try { await api.updateOrderStatus(id, 'paid'); await refreshOrders() }
+    finally { setOrderBusy(null) }
+  }
+  const handleRefund = async (id: number) => {
+    setOrderBusy(id)
+    try { await api.updateOrderStatus(id, 'refunded'); await refreshOrders() }
+    finally { setOrderBusy(null) }
+  }
+  const handleSettleAllPending = async () => {
+    const pendingIds = orders.filter(o => o.payment_status === 'pending').map(o => o.order_id)
+    for (const id of pendingIds) {
+      await api.updateOrderStatus(id, 'paid')
+    }
+    await refreshOrders()
+  }
+  const handleAdjustStock = async (id: number, delta: number) => {
+    setProductBusy(id)
+    try { await api.adjustStock(id, delta); await refreshProducts() }
+    finally { setProductBusy(null) }
+  }
+  const handleDeleteProduct = async (id: number) => {
+    setProductBusy(id)
+    try { await api.deleteProduct(id); await refreshProducts() }
+    finally { setProductBusy(null) }
+  }
+  const handleCreateProduct = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!newProduct.product_name || !newProduct.price || !newProduct.category_id) return
+    setCreating(true)
+    try {
+      await api.createProduct({
+        product_name: newProduct.product_name,
+        description: newProduct.description || null,
+        price: newProduct.price,
+        stock_quantity: Number(newProduct.stock_quantity) || 0,
+        category_id: Number(newProduct.category_id)
+      })
+      setNewProduct({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '' })
+      await refreshProducts()
+    } finally { setCreating(false) }
+  }
+
+  const statusBadge = (s: string) => {
+    const cls = s === 'paid' ? 'badge-paid' : s === 'pending' ? 'badge-pending' : s === 'refunded' ? 'badge-refunded' : 'badge-cancelled'
+    const label = (t[s] ?? s).toUpperCase()
+    return <span className={`status-badge ${cls}`}>{label}</span>
+  }
+  const methodBadge = (m: string) => <span className={`method-badge method-${m}`}>{m}</span>
+
+  if (adminChecking) return <div className="page-section"><div className="container"><p>Checking admin access…</p></div></div>
+  if (!adminAuthed) return (
+    <div className="page-section"><div className="container" style={{maxWidth: 380}}>
+      <div className="page-title"><span className="eyebrow">ADMIN</span><h1>Admin Login</h1><p>Hidden staff entry — ask your manager for credentials.</p></div>
+      <form className="login-card" onSubmit={handleAdminLogin}>
+        <label>Username <input value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="admin" required autoComplete="username" /></label>
+        <label>Password <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••" required autoComplete="current-password" /></label>
+        {loginErr && <p className="login-error">{loginErr}</p>}
+        <button type="submit" className="button button-primary" style={{width: '100%'}}>Sign in</button>
+      </form>
+    </div></div>
+  )
+
+  return (
+    <div className="page-section admin-page">
+      <div className="container">
+        <div className="page-title">
+          <span className="eyebrow">ADMIN</span>
+          <h1>{t.adminTitle}</h1>
+          <p>{t.adminSubtitle}</p>
+          <button className="button button-ghost button-mini" style={{marginTop: 8}} onClick={handleAdminLogout}>Log out</button>
+        </div>
+
+        <div className="admin-stats">
+          <div className="admin-stat"><strong>{orders.length}</strong><span>{t.adminOrdersCount ?? 'orders'}</span></div>
+          <div className="admin-stat"><strong>${totalRevenue.toFixed(2)}</strong><span>{t.adminRevenue ?? 'Revenue'}</span></div>
+          <div className="admin-stat"><strong>{pendingCount}</strong><span>{t.adminOpenTab ?? 'Open tabs'}</span></div>
+          <div className="admin-stat low-stock"><strong>{lowStock}</strong><span>{t.adminLowStock ?? 'Low stock'}</span></div>
+        </div>
+
+        <div className="admin-tabs">
+          <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>{t.adminOrders}</button>
+          <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>{t.adminProducts}</button>
+        </div>
+
+        {loading ? <div className="settle-empty-mini"><LoaderCircle className="spin" /></div> :
+        tab === 'orders' ? (
+          <section className="admin-section">
+            <div className="admin-toolbar">
+              <div className="admin-filters">
+                <button className={statusFilter === 'all' ? 'active' : ''} onClick={() => setStatusFilter('all')}>{t.adminAll}</button>
+                <button className={statusFilter === 'pending' ? 'active' : ''} onClick={() => setStatusFilter('pending')}>{t.adminPending}</button>
+                <button className={statusFilter === 'paid' ? 'active' : ''} onClick={() => setStatusFilter('paid')}>{t.adminPaid}</button>
+              </div>
+              <button
+                className="button button-dark button-mini"
+                disabled={!orders.some(o => o.payment_status === 'pending')}
+                onClick={handleSettleAllPending}
+              >{t.adminSettleAll ?? 'Settle all pending'}</button>
+            </div>
+            {orders.length === 0 ? <div className="admin-empty">{t.adminNoOrders ?? 'No orders match this filter.'}</div> :
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>#{t.orderNumber}</th>
+                    <th>{t.adminCustomer}</th>
+                    <th>{t.adminItems}</th>
+                    <th>{t.adminTotal}</th>
+                    <th>{t.adminMethod}</th>
+                    <th>{t.adminStatus}</th>
+                    <th>{t.adminOrderActions ?? 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map(o => (
+                    <tr key={o.order_id}>
+                      <td><strong>#{o.order_id}</strong><small>{new Date(o.order_date).toLocaleDateString()}</small>
+                        {o.pickup_code && <span className="pickup-chip" style={{ marginLeft: 6 }}>{o.pickup_code}</span>}
+                      </td>
+                      <td>{o.customer_name ?? `#${o.customer_id}`}</td>
+                      <td>{o.items.reduce((s, it) => s + it.quantity, 0)} · {o.items.map(i => i.product.product_name).join(', ')}</td>
+                      <td className="num"><strong>${Number(o.total_amount).toFixed(2)}</strong></td>
+                      <td>{methodBadge(o.payment_method)}</td>
+                      <td>{statusBadge(o.payment_status)}</td>
+                      <td>
+                        {o.payment_status === 'pending' && (
+                          <>
+                            <button className="button button-dark button-mini" disabled={orderBusy === o.order_id} onClick={() => handleSettle(o.order_id)}>
+                              {orderBusy === o.order_id ? <LoaderCircle className="spin" /> : <><Banknote size={14} />{t.adminSettled ?? 'Mark as paid'}</>}
+                            </button>
+                            <button className="button button-ghost button-mini" disabled={orderBusy === o.order_id} onClick={() => handleRefund(o.order_id)}>{t.adminRefund ?? 'Refund'}</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>}
+          </section>
+        ) : (
+          <section className="admin-section">
+            <form className="admin-form" onSubmit={handleCreateProduct}>
+              <h3>{t.adminNewProduct ?? 'New product'}</h3>
+              <div className="admin-form-row">
+                <input value={newProduct.product_name} onChange={e => setNewProduct({ ...newProduct, product_name: e.target.value })} placeholder={t.adminProductName ?? 'Name'} required />
+                <input type="number" step="0.01" min="0" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder={t.adminProductPrice ?? 'Price'} required />
+                <input type="number" min="0" value={newProduct.stock_quantity} onChange={e => setNewProduct({ ...newProduct, stock_quantity: e.target.value })} placeholder={t.adminProductStock ?? 'Stock'} />
+                <select value={newProduct.category_id} onChange={e => setNewProduct({ ...newProduct, category_id: e.target.value })} required>
+                  <option value="">{t.adminProductCategory ?? 'Category'}</option>
+                  {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+                </select>
+              </div>
+              <input value={newProduct.description} onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} placeholder={t.adminProductDesc ?? 'Description'} />
+              <button className="button button-dark" type="submit" disabled={creating}>
+                {creating ? <LoaderCircle className="spin" /> : <><Plus size={16} />{t.adminCreateProduct ?? 'Add product'}</>}
+              </button>
+            </form>
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>{t.adminProductName ?? 'Name'}</th>
+                    <th>{t.adminProductCategory ?? 'Category'}</th>
+                    <th>{t.adminProductPrice ?? 'Price'}</th>
+                    <th>{t.adminProductStock ?? 'Stock'}</th>
+                    <th>{t.adminOrderActions ?? 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map(p => {
+                    const catName = categories.find(c => c.category_id === p.category_id)?.category_name ?? `#${p.category_id}`
+                    return (
+                      <tr key={p.product_id} className={p.stock_quantity < 10 ? 'row-low-stock' : ''}>
+                        <td>#{p.product_id}</td>
+                        <td><strong>{p.product_name}</strong>{p.description && <small>{p.description}</small>}</td>
+                        <td>{catName}</td>
+                        <td className="num"><strong>${Number(p.price).toFixed(2)}</strong></td>
+                        <td className="num">
+                          <span className={p.stock_quantity === 0 ? 'badge-out' : p.stock_quantity < 10 ? 'badge-low' : 'badge-ok'}>{p.stock_quantity}</span>
+                        </td>
+                        <td>
+                          <button className="button button-ghost button-mini" disabled={productBusy === p.product_id} onClick={() => handleAdjustStock(p.product_id, -1)}><Minus size={14} /></button>
+                          <button className="button button-ghost button-mini" disabled={productBusy === p.product_id} onClick={() => handleAdjustStock(p.product_id, 1)}><Plus size={14} /></button>
+                          <button className="button button-danger button-mini" disabled={productBusy === p.product_id} onClick={() => handleDeleteProduct(p.product_id)}>
+                            {productBusy === p.product_id ? <LoaderCircle className="spin" /> : <Trash2 size={14} />}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type PayMethod = 'cash' | 'wechat' | 'alipay'
 type PayState = 'selecting' | 'paying' | 'success' | 'failed'
 
-type BackendPayMethod = 'cash' | 'wechat' | 'alipay' | 'card'
+type BackendPayMethod = 'cash' | 'wechat' | 'alipay'
 
-const PAYMENT_QR: Record<Exclude<PayMethod, 'card'>, string> = {
+const PAYMENT_QR: Record<Exclude<PayMethod, 'cash'>, string> = {
   wechat: '/qrcode-wechat.jpg',
   alipay: '/qrcode-wechat.jpg'
 }
 
 const TO_BACKEND_METHOD: Record<PayMethod, BackendPayMethod> = {
-  card: 'card',
+  cash: 'cash',
   wechat: 'wechat',
   alipay: 'alipay'
 }
 
 function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; onClose: () => void; onSuccess: (method: BackendPayMethod) => void; amount: number; t: any }) {
-  const [method, setMethod] = useState<PayMethod>('card')
+  const [method, setMethod] = useState<PayMethod>('cash')
   const [state, setState] = useState<PayState>('selecting')
-  const [cardNumber, setCardNumber] = useState('')
-  const [cardExpiry, setCardExpiry] = useState('')
-  const [cardCvc, setCardCvc] = useState('')
-  const [cardHolder, setCardHolder] = useState('')
   const [qrExpired, setQrExpired] = useState(false)
 
   useEffect(() => {
     if (!open) {
-      setMethod('card'); setState('selecting')
-      setCardNumber(''); setCardExpiry(''); setCardCvc(''); setCardHolder('')
+      setMethod('cash'); setState('selecting')
       setQrExpired(false)
     }
   }, [open])
 
   useEffect(() => {
-    if (state !== 'selecting' || method === 'card') return
+    if (state !== 'selecting' || method === 'cash') return
     setQrExpired(false)
     const expire = window.setTimeout(() => setQrExpired(true), 120000)
     return () => window.clearTimeout(expire)
   }, [open, method, state])
 
-  const handleCardPay = () => {
-    if (!cardNumber || !cardExpiry || !cardCvc || !cardHolder) return
+  const handleCashConfirm = () => {
     const resolved: BackendPayMethod = TO_BACKEND_METHOD[method]
     setState('paying')
-    window.setTimeout(() => {
-      if (/^4|^5[1-5]/.test(cardNumber.replace(/\s/g, ''))) {
-        setState('success')
-        window.setTimeout(() => onSuccess(resolved), 1200)
-      } else {
-        setState('failed')
-      }
-    }, 2000)
+    window.setTimeout(() => { setState('success'); window.setTimeout(() => onSuccess(resolved), 600) }, 400)
   }
 
   const handleQrPaid = () => {
@@ -502,15 +849,15 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
 
       {state === 'selecting' && <>
         <div className="payment-header">
-          <span className="eyebrow">SECURE PAYMENT</span>
+          <span className="eyebrow">PAYMENT</span>
           <h2>{t.payNowTitle}</h2>
           <p>{t.payNowSub}</p>
           <div className="payment-amount"><span>{t.payAmount}</span><strong>${amount.toFixed(2)}</strong></div>
         </div>
 
         <div className="payment-methods">
-          <button type="button" className={method === 'card' ? 'payment-method selected' : 'payment-method'} onClick={() => setMethod('card')}>
-            <CreditCard size={20} /><span><strong>{t.payWithCard}</strong><small>{t.payWithCardSub}</small></span>
+          <button type="button" className={method === 'cash' ? 'payment-method selected' : 'payment-method'} onClick={() => setMethod('cash')}>
+            <Banknote size={20} /><span><strong>{t.payWithCash ?? 'Cash'}</strong><small>{t.payWithCashSub ?? 'Take the cash'}</small></span>
           </button>
           <button type="button" className={method === 'wechat' ? 'payment-method selected' : 'payment-method'} onClick={() => setMethod('wechat')}>
             <span className="pay-badge wechat">微</span><span><strong>{t.payWithWechat}</strong><small>{t.payWithWechatSub}</small></span>
@@ -520,14 +867,16 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
           </button>
         </div>
 
-        {method === 'card' && <div className="payment-card-form">
-          <label className="field"><span>{t.cardNumber}</span><input value={cardNumber} onChange={e => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))} placeholder="4242 4242 4242 4242" /></label>
-          <div className="form-grid"><label className="field"><span>{t.cardExpiry}</span><input value={cardExpiry} onChange={e => setCardExpiry(e.target.value.slice(0, 5))} placeholder="MM/YY" /></label><label className="field"><span>{t.cardCvc}</span><input value={cardCvc} onChange={e => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123" /></label></div>
-          <label className="field"><span>{t.cardHolder}</span><input value={cardHolder} onChange={e => setCardHolder(e.target.value)} placeholder="JOHN DOE" /></label>
-          <button className="button button-dark full pay-submit" onClick={handleCardPay} disabled={!cardNumber || !cardExpiry || !cardCvc || !cardHolder}>{t.pay} · ${amount.toFixed(2)}</button>
+        {method === 'cash' && <div className="payment-cash-confirm">
+          <button type="button" className="cash-amount-btn" onClick={handleCashConfirm}>
+            <small>{t.tapToConfirm ?? 'Tap to confirm received'}</small>
+            <strong>${amount.toFixed(2)}</strong>
+            <Banknote size={28} />
+          </button>
+          <button type="button" className="text-button" onClick={() => onClose()}><ArrowLeft size={14} />{t.backToMenu}</button>
         </div>}
 
-        {method !== 'card' && <div className="payment-qr">
+        {method !== 'cash' && <div className="payment-qr">
           <div className="qr-box"><img src={PAYMENT_QR[method as 'wechat']} alt={method === 'wechat' ? t.payWithWechat : t.payWithAlipay} /></div>
           <p>{t.qrCodeTip}</p>
           {qrExpired && <div className="qr-expired-note">{t.qrCodeExpired}</div>}
