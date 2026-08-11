@@ -25,12 +25,13 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Tag,
   Trash2,
   X
 } from 'lucide-react'
 import { api } from './api'
 import { copy } from './i18n'
-import type { AuthStatus, CartItem, Category, CreditStatus, Customer, Language, Order, Product } from './types'
+import type { AuthStatus, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, Order, Product } from './types'
 
 const productArt: Record<string, string> = {
   Espresso: 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?auto=format&fit=crop&w=900&q=82',
@@ -41,6 +42,15 @@ const productArt: Record<string, string> = {
 }
 
 const fallbackArt = 'https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=900&q=82'
+
+// Round a discounted price DOWN to the nearest hundredth (2 decimal places).
+// e.g. 5.999 -> 5.99, 4.50 -> 4.50, 3.001 -> 3.00
+function discountedPrice(price: string | number, discountPercent: number): number {
+  const original = Number(price)
+  if (!Number.isFinite(original) || discountPercent <= 0) return Math.floor(original * 100) / 100
+  const reduced = original * (1 - discountPercent / 100)
+  return Math.floor(reduced * 100) / 100
+}
 
 function useStoredState<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -58,6 +68,12 @@ function App() {
   const [language, setLanguage] = useStoredState<Language>('whale-language', 'en')
   const [cart, setCart] = useStoredState<CartItem[]>('whale-cart', [])
   const [customerId, setCustomerId] = useStoredState<number | null>('whale-customer', null)
+  const [claimedCoupon, setClaimedCoupon] = useStoredState<ClaimedCoupon | null>('whale-coupon', null)
+  const [couponPopupSeen, setCouponPopupSeen] = useStoredState<boolean>('whale-coupon-seen', false)
+  const [couponPopupOpen, setCouponPopupOpen] = useState(false)
+  const [couponCatalog, setCouponCatalog] = useState<Coupon[]>([])
+  const [couponsLoading, setCouponsLoading] = useState(false)
+  const [claimingId, setClaimingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [auth, setAuth] = useState<AuthStatus | null>(null)
@@ -68,6 +84,21 @@ function App() {
     if (status.customer) setCustomerId(status.customer.customer_id)
   }).catch(() => setAuth(null)), [setCustomerId])
   useEffect(() => { void refreshAuth() }, [refreshAuth])
+
+  // Fetch the active coupon catalogue from the database whenever the popup opens.
+  const refreshCoupons = useCallback(() => {
+    setCouponsLoading(true)
+    api.coupons().then(setCouponCatalog).catch(() => setCouponCatalog([])).finally(() => setCouponsLoading(false))
+  }, [])
+  useEffect(() => { if (couponPopupOpen) refreshCoupons() }, [couponPopupOpen, refreshCoupons])
+
+  // Auto-open the coupon popup once, the first time a visitor lands on the site.
+  useEffect(() => {
+    if (!couponPopupSeen) {
+      const id = window.setTimeout(() => setCouponPopupOpen(true), 900)
+      return () => window.clearTimeout(id)
+    }
+  }, [couponPopupSeen])
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
   const addToCart = (product: Product) => {
@@ -83,9 +114,50 @@ function App() {
     window.setTimeout(() => setToast(''), 1800)
   }
 
+  const claimCoupon = (coupon: Coupon) => {
+    if (claimingId !== null) return
+    if (claimedCoupon && claimedCoupon.coupon_id === coupon.coupon_id) {
+      setToast(t.couponAlreadyClaimed)
+      window.setTimeout(() => setToast(''), 2200)
+      setCouponPopupOpen(false)
+      setCouponPopupSeen(true)
+      return
+    }
+    setClaimingId(coupon.coupon_id)
+    api.claimCoupon(coupon.coupon_id)
+      .then(() => {
+        setClaimedCoupon({
+          coupon_id: coupon.coupon_id,
+          code: coupon.code,
+          title: coupon.title,
+          description: coupon.description,
+          discount_percent: coupon.discount_percent,
+          claimed_at: new Date().toISOString()
+        })
+        setCouponPopupOpen(false)
+        setCouponPopupSeen(true)
+        setToast(t.couponClaimedToast)
+        window.setTimeout(() => setToast(''), 2600)
+      })
+      .catch(() => {
+        setToast(t.couponClaimFailed)
+        window.setTimeout(() => setToast(''), 2600)
+      })
+      .finally(() => {
+        setClaimingId(null)
+        refreshCoupons()
+      })
+  }
+
+  const removeCoupon = () => {
+    setClaimedCoupon(null)
+    setToast(t.couponBannerRemove)
+    window.setTimeout(() => setToast(''), 1800)
+  }
+
   const locked = Boolean(auth?.credit?.locked)
   const page = path === '/shop'
-    ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
+    ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onRemoveCoupon={removeCoupon} />
     : path === '/cart'
     ? <CartPage t={t} cart={cart} setCart={setCart} />
     : path === '/settle'
@@ -96,7 +168,7 @@ function App() {
         ? <AccountPage t={t} customerId={customerId} setCustomerId={setCustomerId} auth={auth} refreshAuth={refreshAuth} />
         : path === '/admin'
           ? <AdminPage t={t} />
-          : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
+          : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onOpenCoupon={() => setCouponPopupOpen(true)} />
 
   return (
     <div className="app-shell" lang={language === 'zh' ? 'zh-CN' : 'en'}>
@@ -107,12 +179,33 @@ function App() {
       />
       <main>{page}</main>
       <Footer t={t} />
+      {!claimedCoupon && (
+        <button
+          type="button"
+          className="coupon-fab"
+          onClick={() => setCouponPopupOpen(true)}
+          aria-label={t.couponFloating}
+        >
+          <Tag size={18} />
+          <span>{t.couponFloating}</span>
+        </button>
+      )}
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         language={language}
         setLanguage={setLanguage}
         t={t}
+      />
+      <CouponPopup
+        open={couponPopupOpen}
+        t={t}
+        coupons={couponCatalog}
+        loading={couponsLoading}
+        claimingId={claimingId}
+        claimedCoupon={claimedCoupon}
+        onClaim={claimCoupon}
+        onDecline={() => { setCouponPopupOpen(false); setCouponPopupSeen(true) }}
       />
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
@@ -157,7 +250,7 @@ function Header({ t, itemCount, onSettings }: { t: any; itemCount: number; onSet
   )
 }
 
-function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[] }) {
+function OrderPage({ t, addToCart, locked, cart, coupon, onOpenCoupon }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onOpenCoupon: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -174,6 +267,7 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
 
   useEffect(() => { void loadMenu() }, [loadMenu])
   const featured = products.slice(0, 3)
+  const couponActive = Boolean(coupon)
 
   return (
     <>
@@ -183,7 +277,14 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
           <span className="eyebrow light"><Sparkles size={13} /> {t.greeting}</span>
           <h1>{t.heroTitle}</h1>
           <p>{t.heroBody}</p>
-          <Link className="button button-light" to="/shop">{t.orderNow}<ArrowRight size={17} /></Link>
+          <div className="hero-actions">
+            <Link className="button button-light" to="/shop">{t.orderNow}<ArrowRight size={17} /></Link>
+            <button type="button" className="hero-coupon-link" onClick={onOpenCoupon}>
+              <Tag size={15} />
+              {couponActive ? <><Check size={14} />{t.couponActiveHome}</> : <span>{t.couponLinkHome}</span>}
+              {!couponActive && <span className="hero-coupon-badge">15%</span>}
+            </button>
+          </div>
         </div>
         <div className="hero-note"><Leaf size={16} /> 100% arabica</div>
       </section>
@@ -191,6 +292,15 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
       <section className="menu-section" id="menu">
         <div className="container">
           {locked && <LockBanner t={t} />}
+          <button type="button" className="home-coupon-strip" onClick={onOpenCoupon}>
+            <span className="home-coupon-strip-icon"><Tag size={18} /></span>
+            <span className="home-coupon-strip-copy">
+              <strong>{couponActive ? t.couponActiveHome : t.couponStripTitle}</strong>
+              <small>{couponActive ? t.couponStripActiveSub : t.couponStripSub}</small>
+            </span>
+            {!couponActive && <span className="home-coupon-strip-badge">UP TO 25% OFF</span>}
+            <ArrowRight size={16} />
+          </button>
           <div className="section-heading-row">
             <div><span className="eyebrow">WHALE COLLECTION</span><h2>{t.menu}</h2><p>{t.menuSub}</p></div>
             <Link className="shop-all-link" to="/shop">{t.shopAll}<ArrowRight /></Link>
@@ -222,7 +332,7 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
   )
 }
 
-function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[] }) {
+function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onRemoveCoupon: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [category, setCategory] = useState<number | 'all'>('all')
@@ -230,26 +340,49 @@ function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product:
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   useEffect(() => { Promise.all([api.products(), api.categories()]).then(([items, groups]) => { setProducts(items); setCategories(groups) }).finally(() => setLoading(false)) }, [])
+  const discountPercent = coupon?.discount_percent ?? 0
+  const couponActive = Boolean(coupon) && discountPercent > 0
   const listed = products.filter(item => (category === 'all' || item.category_id === category) && item.product_name.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
-    if (sort === 'priceLow') return Number(a.price) - Number(b.price)
-    if (sort === 'priceHigh') return Number(b.price) - Number(a.price)
+    // When a coupon is active, sort by the discounted (calculated) price so the
+    // displayed order matches what the customer actually pays.
+    const priceA = couponActive ? discountedPrice(a.price, discountPercent) : Number(a.price)
+    const priceB = couponActive ? discountedPrice(b.price, discountPercent) : Number(b.price)
+    if (sort === 'priceLow') return priceA - priceB
+    if (sort === 'priceHigh') return priceB - priceA
     if (sort === 'nameAZ') return a.product_name.localeCompare(b.product_name)
     if (sort === 'stockHigh') return b.stock_quantity - a.stock_quantity
     return a.product_id - b.product_id
   })
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  const totalSavings = couponActive
+    ? listed.reduce((sum, item) => sum + (Number(item.price) - discountedPrice(item.price, discountPercent)), 0)
+    : 0
   return <section className="page-section shop-page"><div className="container">
     <div className="shop-hero"><div><span className="eyebrow">WHALE MARKET</span><h1>{t.commodities}</h1><p>{t.commoditiesSub}</p></div><div className="shop-hero-mark"><Coffee /><span>{t.catalogNote}</span></div></div>
     {locked && <LockBanner t={t} />}
+    {couponActive && (
+      <div className="coupon-banner">
+        <span className="coupon-banner-icon"><Tag size={18} /></span>
+        <div className="coupon-banner-copy">
+          <span className="eyebrow">{t.couponBannerEyebrow}</span>
+          <strong>{t.couponBannerTitle} ${totalSavings.toFixed(2)} · {t.couponBannerSub}</strong>
+          <small>{coupon!.code} · {discountPercent}% {t.couponBadge}</small>
+        </div>
+        <button className="button button-ghost button-mini" onClick={onRemoveCoupon}>{t.couponBannerRemove}<X size={14} /></button>
+      </div>
+    )}
     <div className="shop-toolbar"><label className="search-box"><Search /><input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search} /></label><div className="filter-tabs shop-tabs"><button className={category === 'all' ? 'active' : ''} onClick={() => setCategory('all')}>{t.all}</button>{categories.map(group => <button className={category === group.category_id ? 'active' : ''} onClick={() => setCategory(group.category_id)} key={group.category_id}>{categoryName(group.category_name, t)}</button>)}</div><label className="sort-control"><span>{t.sortBy}</span><select value={sort} onChange={e => setSort(e.target.value)}><option value="featured">{t.featured}</option><option value="priceLow">{t.priceLow}</option><option value="priceHigh">{t.priceHigh}</option><option value="nameAZ">{t.nameAZ}</option><option value="stockHigh">{t.stockHigh}</option></select></label></div>
     <div className="shop-meta"><span>{t.showing} <strong>{listed.length}</strong> / {products.length}</span>{cartCount > 0 && <Link to="/cart"><ShoppingBag />{cartCount} {t.inYourCart}<ArrowRight /></Link>}</div>
     {loading ? <LoadingBlock text={t.brewing} /> : <div className="catalog-grid">{listed.map((item, index) => {
       const available = availableStock(item, cart)
       const reserved = cart.find(cartItem => cartItem.product_id === item.product_id)?.quantity ?? 0
       const soldOut = available === 0
+      const original = Number(item.price)
+      const final = couponActive ? discountedPrice(item.price, discountPercent) : original
+      const priceChanged = couponActive && final !== original
       return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} key={item.product_id} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
-        <div className="catalog-image"><img src={productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
-        <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><strong>${Number(item.price).toFixed(2)}</strong></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${Number(item.price).toFixed(2)}</>}</button></div>
+        <div className="catalog-image"><img src={productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}{priceChanged && <span className="catalog-coupon-pill">{discountPercent}% OFF</span>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
+        <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><strong className={priceChanged ? 'price-discounted' : ''}>${final.toFixed(2)}{priceChanged && <span className="price-was">{t.couponOriginal} ${original.toFixed(2)}</span>}</strong></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${final.toFixed(2)}</>}</button></div>
       </article>
     })}</div>}
     {!loading && listed.length === 0 && <div className="empty-state compact"><Search /><h3>{t.noMatches}</h3><p>{t.noMatchesSub}</p></div>}
@@ -447,6 +580,71 @@ function AccountPage({ t, customerId, setCustomerId, auth, refreshAuth }: { t: a
 
 function SettingsPanel({ open, onClose, language, setLanguage, t }: { open: boolean; onClose: () => void; language: Language; setLanguage: (value: Language) => void; t: any }) {
   return <div className={open ? 'settings-layer open' : 'settings-layer'} aria-hidden={!open}><button className="settings-backdrop" onClick={onClose} aria-label={t.close} /><aside className="settings-drawer"><div className="drawer-head"><div><span className="eyebrow">WHALE</span><h2>{t.settingsTitle}</h2></div><button className="icon-button" onClick={onClose}><X /></button></div><div className="settings-group"><div className="settings-label"><Globe2 /><div><h3>{t.language}</h3><p>{t.languageSub}</p></div></div><div className="language-options"><button className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}><span>EN</span><div><strong>{t.english}</strong><small>English</small></div>{language === 'en' && <Check />}</button><button className={language === 'zh' ? 'selected' : ''} onClick={() => setLanguage('zh')}><span>中</span><div><strong>{t.chinese}</strong><small>Chinese</small></div>{language === 'zh' && <Check />}</button></div></div><div className="settings-row"><span className="settings-row-icon"><Sparkles /></span><div><strong>{t.appearance}</strong><small>{t.systemTheme}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><ShieldCheck /></span><div><strong>{t.privacy}</strong><small>{t.privacySub}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><CircleUserRound /></span><div><strong>{t.help}</strong><small>hello@whale.coffee</small></div><ChevronRight /></div><div className="drawer-footer"><Coffee /><span>Whale v1.0</span></div></aside></div>
+}
+
+function CouponPopup({ open, t, coupons, loading, claimingId, claimedCoupon, onClaim, onDecline }: { open: boolean; t: any; coupons: Coupon[]; loading: boolean; claimingId: number | null; claimedCoupon: ClaimedCoupon | null; onClaim: (coupon: Coupon) => void; onDecline: () => void }) {
+  if (!open) return null
+  return (
+    <div className="coupon-layer" role="dialog" aria-modal="true">
+      <button className="coupon-backdrop" onClick={onDecline} aria-label={t.close} />
+      <div className="coupon-modal">
+        <button className="coupon-close" onClick={onDecline} aria-label={t.close}><X size={18} /></button>
+        <div className="coupon-modal-head">
+          <span className="eyebrow">{t.couponPopupEyebrow}</span>
+          <div className="coupon-modal-icon"><Tag size={26} /></div>
+          <h2>{t.couponPopupTitle}</h2>
+          <p>{t.couponPopupBody}</p>
+        </div>
+        <div className="coupon-list">
+          {loading ? (
+            <div className="coupon-list-empty"><LoaderCircle size={22} className="spin" /><span>{t.brewing}</span></div>
+          ) : coupons.length === 0 ? (
+            <div className="coupon-list-empty"><Tag size={22} /><span>{t.couponListEmpty}</span></div>
+          ) : coupons.map(coupon => {
+            const isClaimed = claimedCoupon?.coupon_id === coupon.coupon_id
+            const isClaiming = claimingId === coupon.coupon_id
+            const soldOut = coupon.remaining_claims !== null && coupon.remaining_claims <= 0 && !isClaimed
+            return (
+              <article key={coupon.coupon_id} className={isClaimed ? 'coupon-item is-claimed' : soldOut ? 'coupon-item is-sold-out' : 'coupon-item'}>
+                <div className="coupon-item-notch left" /><div className="coupon-item-notch right" />
+                <div className="coupon-item-head">
+                  <span className="coupon-item-code">{coupon.code}</span>
+                  <strong className="coupon-item-percent">{Number(coupon.discount_percent)}% OFF</strong>
+                </div>
+                <div className="coupon-item-body">
+                  <h3>{coupon.title}</h3>
+                  {coupon.description && <p>{coupon.description}</p>}
+                </div>
+                <div className="coupon-item-foot">
+                  {coupon.remaining_claims !== null && (
+                    <small className="coupon-item-remaining">
+                      {soldOut ? t.couponSoldOut : t.couponRemaining.replace('{n}', String(coupon.remaining_claims))}
+                    </small>
+                  )}
+                  {isClaimed ? (
+                    <span className="coupon-item-claimed-badge"><Check size={14} />{t.couponActiveBadge}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="button button-dark button-mini"
+                      disabled={isClaiming || soldOut}
+                      onClick={() => onClaim(coupon)}
+                    >
+                      {isClaiming ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
+                      {soldOut ? t.couponSoldOut : t.couponClaimCta}
+                    </button>
+                  )}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+        <div className="coupon-actions">
+          <button type="button" className="text-button coupon-decline" onClick={onDecline}>{t.couponDeclineCta}</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function Footer({ t }: { t: any }) { return <footer><div className="container footer-inner"><Link className="brand footer-brand" to="/"><span className="brand-mark"><Coffee size={18} /></span>WHALE</Link><p>{t.thoughtfulCoffee}</p><nav><Link to="/">{t.order}</Link><Link to="/shop">{t.shop}</Link><Link to="/settle">{t.settle}</Link><Link to="/account">{t.account}</Link><a href="/docs">API</a></nav><span>© {new Date().getFullYear()} Whale</span></div></footer> }

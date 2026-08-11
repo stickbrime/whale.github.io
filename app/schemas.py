@@ -233,3 +233,63 @@ class AuthStatus(ORMModel):
     configured: bool = True
     customer: Optional["CustomerRead"] = None
     credit: Optional[CreditStatus] = None
+
+
+class CouponBase(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    discount_percent: Decimal = Field(ge=0, le=100, max_digits=5, decimal_places=2)
+    is_active: bool = True
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
+    max_claims: Optional[int] = Field(default=None, ge=0)
+    sort_order: int = Field(default=0, ge=0)
+
+    @field_validator("discount_percent")
+    @classmethod
+    def normalize_discount(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
+
+
+class CouponCreate(CouponBase):
+    pass
+
+
+class CouponUpdate(BaseModel):
+    code: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    title: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    discount_percent: Optional[Decimal] = Field(
+        default=None, ge=0, le=100, max_digits=5, decimal_places=2
+    )
+    is_active: Optional[bool] = None
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
+    max_claims: Optional[int] = Field(default=None, ge=0)
+    sort_order: Optional[int] = Field(default=None, ge=0)
+
+    @field_validator("discount_percent")
+    @classmethod
+    def normalize_discount(cls, value: Optional[Decimal]) -> Optional[Decimal]:
+        return value.quantize(Decimal("0.01")) if value is not None else None
+
+
+class CouponRead(CouponBase, ORMModel):
+    coupon_id: int
+    claimed_count: int
+    created_at: datetime
+    remaining_claims: Optional[int] = None
+
+
+class CouponClaimRequest(BaseModel):
+    coupon_id: int = Field(gt=0)
+
+
+class CouponClaimResponse(BaseModel):
+    coupon_id: int
+    code: str
+    title: str
+    description: Optional[str] = None
+    discount_percent: Decimal
+    message: str
