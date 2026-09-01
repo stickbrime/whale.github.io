@@ -4,6 +4,7 @@ export type Product = {
   description: string | null
   price: string
   stock_quantity: number
+  image_url: string | null
   category_id: number
 }
 
@@ -72,4 +73,30 @@ export type AuthStatus = {
   configured: boolean
   customer: Customer | null
   credit: CreditStatus | null
+}
+
+export type Coupon = {
+  coupon_id: number
+  code: string
+  title: string
+  description: string | null
+  discount_percent: number
+  is_active: boolean
+  valid_from: string | null
+  valid_until: string | null
+  max_claims: number | null
+  claimed_count: number
+  sort_order: number
+  created_at: string
+  remaining_claims: number | null
+}
+
+// A coupon the visitor has claimed and is currently applying on the shop tab.
+export type ClaimedCoupon = {
+  coupon_id: number
+  code: string
+  title: string
+  description: string | null
+  discount_percent: number
+  claimed_at: string
 }

@@ -13,6 +13,7 @@ import {
   Eye,
   Globe2,
   Heart,
+  ImagePlus,
   Leaf,
   LoaderCircle,
   LockKeyhole,
@@ -26,12 +27,13 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Tag,
   Trash2,
   X
 } from 'lucide-react'
 import { api } from './api'
 import { copy } from './i18n'
-import type { AuthStatus, CartItem, Category, CreditStatus, Customer, Language, Order, Product } from './types'
+import type { AuthStatus, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, Order, Product } from './types'
 
 const productArt: Record<string, string> = {
   Espresso: 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?auto=format&fit=crop&w=900&q=82',
@@ -42,6 +44,48 @@ const productArt: Record<string, string> = {
 }
 
 const fallbackArt = 'https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=900&q=82'
+
+// Round a discounted price DOWN to the nearest hundredth (2 decimal places).
+// e.g. 5.999 -> 5.99, 4.50 -> 4.50, 3.001 -> 3.00
+function discountedPrice(price: string | number, discountPercent: number): number {
+  const original = Number(price)
+  if (!Number.isFinite(original) || discountPercent <= 0) return Math.floor(original * 100) / 100
+  const reduced = original * (1 - discountPercent / 100)
+  return Math.floor(reduced * 100) / 100
+}
+
+// Read an image File, downscale it to fit within ~1000px on the long edge, and
+// return a compact JPEG data URL so it can be stored in the product's image_url
+// column without bloating the JSON payload or the database row.
+function readImageAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) { reject(new Error('Please choose an image file')); return }
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read the selected file'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('That image could not be decoded'))
+      img.onload = () => {
+        const maxEdge = 1000
+        let { width, height } = img
+        if (width > maxEdge || height > maxEdge) {
+          const scale = maxEdge / Math.max(width, height)
+          width = Math.round(width * scale)
+          height = Math.round(height * scale)
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('Canvas not supported')); return }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
 
 function useStoredState<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -59,6 +103,12 @@ function App() {
   const [language, setLanguage] = useStoredState<Language>('whale-language', 'en')
   const [cart, setCart] = useStoredState<CartItem[]>('whale-cart', [])
   const [customerId, setCustomerId] = useStoredState<number | null>('whale-customer', null)
+  const [claimedCoupon, setClaimedCoupon] = useStoredState<ClaimedCoupon | null>('whale-coupon', null)
+  const [couponPopupSeen, setCouponPopupSeen] = useStoredState<boolean>('whale-coupon-seen', false)
+  const [couponPopupOpen, setCouponPopupOpen] = useState(false)
+  const [couponCatalog, setCouponCatalog] = useState<Coupon[]>([])
+  const [couponsLoading, setCouponsLoading] = useState(false)
+  const [claimingId, setClaimingId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [auth, setAuth] = useState<AuthStatus | null>(null)
@@ -69,6 +119,21 @@ function App() {
     if (status.customer) setCustomerId(status.customer.customer_id)
   }).catch(() => setAuth(null)), [setCustomerId])
   useEffect(() => { void refreshAuth() }, [refreshAuth])
+
+  // Fetch the active coupon catalogue from the database whenever the popup opens.
+  const refreshCoupons = useCallback(() => {
+    setCouponsLoading(true)
+    api.coupons().then(setCouponCatalog).catch(() => setCouponCatalog([])).finally(() => setCouponsLoading(false))
+  }, [])
+  useEffect(() => { if (couponPopupOpen) refreshCoupons() }, [couponPopupOpen, refreshCoupons])
+
+  // Auto-open the coupon popup once, the first time a visitor lands on the site.
+  useEffect(() => {
+    if (!couponPopupSeen) {
+      const id = window.setTimeout(() => setCouponPopupOpen(true), 900)
+      return () => window.clearTimeout(id)
+    }
+  }, [couponPopupSeen])
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
   const addToCart = (product: Product) => {
@@ -84,20 +149,63 @@ function App() {
     window.setTimeout(() => setToast(''), 1800)
   }
 
+  const claimCoupon = (coupon: Coupon) => {
+    if (claimingId !== null) return
+    if (claimedCoupon && claimedCoupon.coupon_id === coupon.coupon_id) {
+      setToast(t.couponAlreadyClaimed)
+      window.setTimeout(() => setToast(''), 2200)
+      setCouponPopupOpen(false)
+      setCouponPopupSeen(true)
+      return
+    }
+    setClaimingId(coupon.coupon_id)
+    api.claimCoupon(coupon.coupon_id)
+      .then(() => {
+        setClaimedCoupon({
+          coupon_id: coupon.coupon_id,
+          code: coupon.code,
+          title: coupon.title,
+          description: coupon.description,
+          discount_percent: coupon.discount_percent,
+          claimed_at: new Date().toISOString()
+        })
+        setCouponPopupOpen(false)
+        setCouponPopupSeen(true)
+        setToast(t.couponClaimedToast)
+        window.setTimeout(() => setToast(''), 2600)
+      })
+      .catch(() => {
+        setToast(t.couponClaimFailed)
+        window.setTimeout(() => setToast(''), 2600)
+      })
+      .finally(() => {
+        setClaimingId(null)
+        refreshCoupons()
+      })
+  }
+
+  const removeCoupon = () => {
+    setClaimedCoupon(null)
+    setToast(t.couponBannerRemove)
+    window.setTimeout(() => setToast(''), 1800)
+  }
+
   const locked = Boolean(auth?.credit?.locked)
   const page = path === '/shop'
-    ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
+    ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onRemoveCoupon={removeCoupon} />
     : path === '/cart'
     ? <CartPage t={t} cart={cart} setCart={setCart} />
     : path === '/settle'
     ? <SettlePage t={t} customer={auth?.customer ?? null} customerId={customerId} auth={auth} refreshAuth={refreshAuth} />
     : path === '/checkout'
-      ? <CheckoutPage t={t} cart={cart} clearCart={() => setCart([])} customerId={customerId} setCustomerId={setCustomerId} auth={auth} />
-      : path === '/account'
-        ? <AccountPage t={t} customerId={customerId} setCustomerId={setCustomerId} auth={auth} refreshAuth={refreshAuth} />
-        : path === '/admin'
-          ? <AdminPage t={t} />
-          : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} />
+      ? <CheckoutPage t={t} cart={cart} clearCart={() => setCart([])} customerId={customerId} setCustomerId={setCustomerId} auth={auth} claimedCoupon={claimedCoupon} />
+      : path === '/pay'
+        ? <PaymentPage t={t} />
+        : path === '/account'
+          ? <AccountPage t={t} customerId={customerId} setCustomerId={setCustomerId} auth={auth} refreshAuth={refreshAuth} />
+          : path === '/admin'
+            ? <AdminPage t={t} />
+            : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onOpenCoupon={() => setCouponPopupOpen(true)} />
 
   return (
     <div className="app-shell" lang={language === 'zh' ? 'zh-CN' : 'en'}>
@@ -108,12 +216,33 @@ function App() {
       />
       <main>{page}</main>
       <Footer t={t} />
+      {!claimedCoupon && (
+        <button
+          type="button"
+          className="coupon-fab"
+          onClick={() => setCouponPopupOpen(true)}
+          aria-label={t.couponFloating}
+        >
+          <Tag size={18} />
+          <span>{t.couponFloating}</span>
+        </button>
+      )}
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         language={language}
         setLanguage={setLanguage}
         t={t}
+      />
+      <CouponPopup
+        open={couponPopupOpen}
+        t={t}
+        coupons={couponCatalog}
+        loading={couponsLoading}
+        claimingId={claimingId}
+        claimedCoupon={claimedCoupon}
+        onClaim={claimCoupon}
+        onDecline={() => { setCouponPopupOpen(false); setCouponPopupSeen(true) }}
       />
       {toast && <div className="toast"><Check size={16} />{toast}</div>}
     </div>
@@ -158,7 +287,7 @@ function Header({ t, itemCount, onSettings }: { t: any; itemCount: number; onSet
   )
 }
 
-function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[] }) {
+function OrderPage({ t, addToCart, locked, cart, coupon, onOpenCoupon }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onOpenCoupon: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,6 +304,7 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
 
   useEffect(() => { void loadMenu() }, [loadMenu])
   const featured = products.slice(0, 3)
+  const couponActive = Boolean(coupon)
 
   return (
     <>
@@ -184,7 +314,14 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
           <span className="eyebrow light"><Sparkles size={13} /> {t.greeting}</span>
           <h1>{t.heroTitle}</h1>
           <p>{t.heroBody}</p>
-          <Link className="button button-light" to="/shop">{t.orderNow}<ArrowRight size={17} /></Link>
+          <div className="hero-actions">
+            <Link className="button button-light" to="/shop">{t.orderNow}<ArrowRight size={17} /></Link>
+            <button type="button" className="hero-coupon-link" onClick={onOpenCoupon}>
+              <Tag size={15} />
+              {couponActive ? <><Check size={14} />{t.couponActiveHome}</> : <span>{t.couponLinkHome}</span>}
+              {!couponActive && <span className="hero-coupon-badge">15%</span>}
+            </button>
+          </div>
         </div>
         <div className="hero-note"><Leaf size={16} /> 100% arabica</div>
       </section>
@@ -192,6 +329,15 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
       <section className="menu-section" id="menu">
         <div className="container">
           {locked && <LockBanner t={t} />}
+          <button type="button" className="home-coupon-strip" onClick={onOpenCoupon}>
+            <span className="home-coupon-strip-icon"><Tag size={18} /></span>
+            <span className="home-coupon-strip-copy">
+              <strong>{couponActive ? t.couponActiveHome : t.couponStripTitle}</strong>
+              <small>{couponActive ? t.couponStripActiveSub : t.couponStripSub}</small>
+            </span>
+            {!couponActive && <span className="home-coupon-strip-badge">UP TO 25% OFF</span>}
+            <ArrowRight size={16} />
+          </button>
           <div className="section-heading-row">
             <div><span className="eyebrow">WHALE COLLECTION</span><h2>{t.menu}</h2><p>{t.menuSub}</p></div>
             <Link className="shop-all-link" to="/shop">{t.shopAll}<ArrowRight /></Link>
@@ -201,7 +347,7 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
               {featured.map((product, index) => (
                 <article className="product-card" key={product.product_id} style={{ '--delay': `${index * 55}ms` } as React.CSSProperties}>
                   <div className="product-image-wrap">
-                    <img src={productArt[product.product_name] ?? fallbackArt} alt={product.product_name} className="product-image" />
+                    <img src={product.image_url ?? productArt[product.product_name] ?? fallbackArt} alt={product.product_name} className="product-image" />
                     <span className={availableStock(product, cart) > 0 ? 'stock-pill' : 'stock-pill sold-out'}>{availableStock(product, cart) > 0 ? `${availableStock(product, cart)} ${t.left}` : t.soldOut}</span>
                     <button className="heart-button" aria-label="Add to favorites"><Heart size={18} /></button>
                   </div>
@@ -223,7 +369,7 @@ function OrderPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product
   )
 }
 
-function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[] }) {
+function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onRemoveCoupon: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [category, setCategory] = useState<number | 'all'>('all')
@@ -231,9 +377,12 @@ function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product:
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   useEffect(() => { Promise.all([api.products(), api.categories()]).then(([items, groups]) => { setProducts(items); setCategories(groups) }).finally(() => setLoading(false)) }, [])
+  const discountPercent = coupon?.discount_percent ?? 0
   const listed = products.filter(item => (category === 'all' || item.category_id === category) && item.product_name.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
-    if (sort === 'priceLow') return Number(a.price) - Number(b.price)
-    if (sort === 'priceHigh') return Number(b.price) - Number(a.price)
+    const pa = discountPercent > 0 ? discountedPrice(a.price, discountPercent) : Number(a.price)
+    const pb = discountPercent > 0 ? discountedPrice(b.price, discountPercent) : Number(b.price)
+    if (sort === 'priceLow') return pa - pb
+    if (sort === 'priceHigh') return pb - pa
     if (sort === 'nameAZ') return a.product_name.localeCompare(b.product_name)
     if (sort === 'stockHigh') return b.stock_quantity - a.stock_quantity
     return a.product_id - b.product_id
@@ -241,6 +390,14 @@ function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product:
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
   return <section className="page-section shop-page"><div className="container">
     <div className="shop-hero"><div><span className="eyebrow">WHALE MARKET</span><h1>{t.commodities}</h1><p>{t.commoditiesSub}</p></div><div className="shop-hero-mark"><Coffee /><span>{t.catalogNote}</span></div></div>
+    {coupon && <div className="coupon-banner">
+      <div className="coupon-banner-icon"><Tag size={20} /></div>
+      <div className="coupon-banner-copy">
+        <strong>{coupon.title}</strong>
+        <span>{t.couponBannerCode}: <em>{coupon.code}</em> · {Number(coupon.discount_percent)}% {t.couponBannerOff}</span>
+      </div>
+      <button type="button" className="text-button coupon-banner-remove" onClick={onRemoveCoupon}><Trash2 size={15} />{t.couponBannerRemoveLabel}</button>
+    </div>}
     {locked && <LockBanner t={t} />}
     <div className="shop-toolbar"><label className="search-box"><Search /><input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search} /></label><div className="filter-tabs shop-tabs"><button className={category === 'all' ? 'active' : ''} onClick={() => setCategory('all')}>{t.all}</button>{categories.map(group => <button className={category === group.category_id ? 'active' : ''} onClick={() => setCategory(group.category_id)} key={group.category_id}>{categoryName(group.category_name, t)}</button>)}</div><label className="sort-control"><span>{t.sortBy}</span><select value={sort} onChange={e => setSort(e.target.value)}><option value="featured">{t.featured}</option><option value="priceLow">{t.priceLow}</option><option value="priceHigh">{t.priceHigh}</option><option value="nameAZ">{t.nameAZ}</option><option value="stockHigh">{t.stockHigh}</option></select></label></div>
     <div className="shop-meta"><span>{t.showing} <strong>{listed.length}</strong> / {products.length}</span>{cartCount > 0 && <Link to="/cart"><ShoppingBag />{cartCount} {t.inYourCart}<ArrowRight /></Link>}</div>
@@ -248,9 +405,11 @@ function ShopPage({ t, addToCart, locked, cart }: { t: any; addToCart: (product:
       const available = availableStock(item, cart)
       const reserved = cart.find(cartItem => cartItem.product_id === item.product_id)?.quantity ?? 0
       const soldOut = available === 0
+      const original = Number(item.price)
+      const finalPrice = discountPercent > 0 ? discountedPrice(original, discountPercent) : original
       return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} key={item.product_id} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
-        <div className="catalog-image"><img src={productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
-        <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><strong>${Number(item.price).toFixed(2)}</strong></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${Number(item.price).toFixed(2)}</>}</button></div>
+        <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}{discountPercent > 0 && <span className="catalog-discount-badge">{t.couponDiscountBadge}</span>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
+        <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>${original.toFixed(2)}</span>}<strong>${finalPrice.toFixed(2)}</strong></div></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${finalPrice.toFixed(2)}</>}</button></div>
       </article>
     })}</div>}
     {!loading && listed.length === 0 && <div className="empty-state compact"><Search /><h3>{t.noMatches}</h3><p>{t.noMatchesSub}</p></div>}
@@ -268,7 +427,7 @@ function CartPage({ t, cart, setCart }: { t: any; cart: CartItem[]; setCart: (va
       <div className="cart-layout">
         <div className="cart-list">
           {cart.map(item => <article className="cart-item" key={item.product_id}>
-            <img src={productArt[item.product_name] ?? fallbackArt} alt="" />
+            <img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" />
             <div className="cart-item-main"><div className="cart-item-title"><div><span>{t.coffee}</span><h3>{item.product_name}</h3></div><strong>${(Number(item.price) * item.quantity).toFixed(2)}</strong></div>
               <p>${Number(item.price).toFixed(2)} {t.each}</p>
               <input className="customization-input" placeholder={`${t.customization} (${t.optional})`} value={item.customization ?? ''} onChange={e => customize(item.product_id, e.target.value)} />
@@ -282,7 +441,7 @@ function CartPage({ t, cart, setCart }: { t: any; cart: CartItem[]; setCart: (va
   </div></section>
 }
 
-function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: { t: any; cart: CartItem[]; clearCart: () => void; customerId: number | null; setCustomerId: (id: number | null) => void; auth: AuthStatus | null }) {
+function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, claimedCoupon }: { t: any; cart: CartItem[]; clearCart: () => void; customerId: number | null; setCustomerId: (id: number | null) => void; auth: AuthStatus | null; claimedCoupon: ClaimedCoupon | null }) {
   const navigate = useNavigate()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [mode, setMode] = useState<'existing' | 'new'>(auth?.authenticated ? 'existing' : 'new')
@@ -297,7 +456,11 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
   const [confirmed, setConfirmed] = useState<Order | null>(null)
   const [showPayment, setShowPayment] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
-  const total = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
+  const discountPercent = claimedCoupon?.discount_percent ?? 0
+  const total = discountPercent > 0
+    ? Math.floor(subtotal * (1 - discountPercent / 100) * 100) / 100
+    : subtotal
 
   useEffect(() => {
     if (auth?.authenticated && auth.customer) {
@@ -357,6 +520,22 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
     setShowPayment(false); setSubmitting(true); setError('')
     try {
       const id = await createCustomerIfNeeded()
+      if (method === 'wechat' || method === 'alipay') {
+        // Make payment obligatory: create the order as pending and redirect to
+        // the dedicated /pay page, which shows the QR and polls until the
+        // backend reports the order paid.
+        const couponNote = claimedCoupon ? `[Coupon: ${claimedCoupon.code} -${Number(claimedCoupon.discount_percent)}%]` : ''
+        const order = await api.createOrder({
+          customer_id: id,
+          pickup_time: pickup ? `${pickup}:00` : undefined,
+          payment_method: method,
+          payment_status: 'pending',
+          items: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity, customization: [item.customization, couponNote].filter(Boolean).join(' · ') || undefined }))
+        })
+        clearCart()
+        navigate(`/pay?order=${order.order_id}&method=${method}`)
+        return
+      }
       await createOrder(id, method)
     } catch (err) { setError(err instanceof Error ? err.message : t.apiOffline) }
     finally { setSubmitting(false) }
@@ -379,7 +558,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth }: {
           {payment === 'pending' && <div className="credit-terms"><div><strong>{t.tabLength}</strong><span>{creditDays} {t.days}</span></div><input type="range" min="1" max="14" step="1" value={creditDays} onChange={e => setCreditDays(Number(e.target.value))} /><div className="range-labels"><span>1 {t.days}</span><span>7 {t.days}</span><span>14 {t.days}</span></div><small>{t.maxTwoWeeks}</small><p><ShieldCheck size={15} /> {t.dueOn} {new Date(Date.now() + creditDays * 86400000).toLocaleDateString()}.</p></div>}
         </section>
       </div>
-      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={item.product_id}><img src={productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}</strong><small>{item.quantity} × ${Number(item.price).toFixed(2)}</small></div><span>${(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}<div className="summary-total"><span>{t.total}</span><strong>${total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
+      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={item.product_id}><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}</strong><small>{item.quantity} × ${Number(item.price).toFixed(2)}</small></div><span>${(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}{claimedCoupon && <div className="summary-coupon"><div className="summary-coupon-line"><Tag size={14} /><span><strong>{claimedCoupon.code}</strong> · {Number(claimedCoupon.discount_percent)}% {t.couponBannerOff}</span></div><div className="summary-line"><span>{t.subtotal}</span><span>${subtotal.toFixed(2)}</span></div><div className="summary-line discount"><span>{t.couponBannerTitle}</span><span>−${(subtotal - total).toFixed(2)}</span></div></div>}<div className="summary-total"><span>{t.total}</span><strong>${total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
     </form>
     <PaymentModal open={showPayment} onClose={() => setShowPayment(false)} onSuccess={handlePaid} amount={total} t={t} />
   </div></section>
@@ -545,8 +724,9 @@ function AdminPage({ t }: { t: any }) {
   const [loading, setLoading] = useState(true)
   const [orderBusy, setOrderBusy] = useState<number | null>(null)
   const [productBusy, setProductBusy] = useState<number | null>(null)
-  const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '' })
+  const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '', image_url: '' })
   const [creating, setCreating] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
 
   useEffect(() => {
     api.adminStatus().then(s => setAdminAuthed(s.authenticated)).catch(() => setAdminAuthed(false)).finally(() => setAdminChecking(false))
@@ -619,6 +799,17 @@ function AdminPage({ t }: { t: any }) {
     try { await api.deleteProduct(id); await refreshProducts() }
     finally { setProductBusy(null) }
   }
+  const handleImageChange = async (e: FormEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0]
+    e.currentTarget.value = ''
+    if (!file) return
+    setProcessingImage(true)
+    try {
+      const dataUrl = await readImageAsDataUrl(file)
+      setNewProduct(prev => ({ ...prev, image_url: dataUrl }))
+    } finally { setProcessingImage(false) }
+  }
+
   const handleCreateProduct = async (e: FormEvent) => {
     e.preventDefault()
     if (!newProduct.product_name || !newProduct.price || !newProduct.category_id) return
@@ -629,9 +820,10 @@ function AdminPage({ t }: { t: any }) {
         description: newProduct.description || null,
         price: newProduct.price,
         stock_quantity: Number(newProduct.stock_quantity) || 0,
+        image_url: newProduct.image_url || null,
         category_id: Number(newProduct.category_id)
       })
-      setNewProduct({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '' })
+      setNewProduct({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '', image_url: '' })
       await refreshProducts()
     } finally { setCreating(false) }
   }
@@ -748,6 +940,25 @@ function AdminPage({ t }: { t: any }) {
                 </select>
               </div>
               <input value={newProduct.description} onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} placeholder={t.adminProductDesc ?? 'Description'} />
+              <div className="admin-image-field">
+                <label className="admin-image-label">{t.adminProductImage}</label>
+                <small className="admin-image-hint">{t.adminProductImageHint}</small>
+                {newProduct.image_url ? (
+                  <div className="admin-image-preview">
+                    <img src={newProduct.image_url} alt={t.adminProductImage} />
+                    <div className="admin-image-actions">
+                      <label className="text-button"><ImagePlus size={14} />{t.adminChangeImage}<input type="file" accept="image/*" hidden onChange={handleImageChange} disabled={processingImage} /></label>
+                      <button type="button" className="text-button danger" disabled={processingImage} onClick={() => setNewProduct({ ...newProduct, image_url: '' })}><Trash2 size={14} />{t.adminRemoveImage}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className={`admin-image-drop${processingImage ? ' is-busy' : ''}`}>
+                    {processingImage ? <LoaderCircle className="spin" size={20} /> : <ImagePlus size={20} />}
+                    <span>{processingImage ? t.adminImageProcessing : t.adminAddImage}</span>
+                    <input type="file" accept="image/*" hidden onChange={handleImageChange} disabled={processingImage} />
+                  </label>
+                )}
+              </div>
               <button className="button button-dark" type="submit" disabled={creating}>
                 {creating ? <LoaderCircle className="spin" /> : <><Plus size={16} />{t.adminCreateProduct ?? 'Add product'}</>}
               </button>
@@ -770,7 +981,10 @@ function AdminPage({ t }: { t: any }) {
                     return (
                       <tr key={p.product_id} className={p.stock_quantity < 10 ? 'row-low-stock' : ''}>
                         <td>#{p.product_id}</td>
-                        <td><strong>{p.product_name}</strong>{p.description && <small>{p.description}</small>}</td>
+                        <td className="product-cell">
+                          {p.image_url && <img className="admin-product-thumb" src={p.image_url} alt="" />}
+                          <div><strong>{p.product_name}</strong>{p.description && <small>{p.description}</small>}</div>
+                        </td>
                         <td>{catName}</td>
                         <td className="num"><strong>${Number(p.price).toFixed(2)}</strong></td>
                         <td className="num">
@@ -815,32 +1029,17 @@ const TO_BACKEND_METHOD: Record<PayMethod, BackendPayMethod> = {
 function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; onClose: () => void; onSuccess: (method: BackendPayMethod) => void; amount: number; t: any }) {
   const [method, setMethod] = useState<PayMethod>('cash')
   const [state, setState] = useState<PayState>('selecting')
-  const [qrExpired, setQrExpired] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setMethod('cash'); setState('selecting')
-      setQrExpired(false)
     }
   }, [open])
-
-  useEffect(() => {
-    if (state !== 'selecting' || method === 'cash') return
-    setQrExpired(false)
-    const expire = window.setTimeout(() => setQrExpired(true), 120000)
-    return () => window.clearTimeout(expire)
-  }, [open, method, state])
 
   const handleCashConfirm = () => {
     const resolved: BackendPayMethod = TO_BACKEND_METHOD[method]
     setState('paying')
     window.setTimeout(() => { setState('success'); window.setTimeout(() => onSuccess(resolved), 600) }, 400)
-  }
-
-  const handleQrPaid = () => {
-    const resolved: BackendPayMethod = TO_BACKEND_METHOD[method]
-    setState('paying')
-    window.setTimeout(() => { setState('success'); window.setTimeout(() => onSuccess(resolved), 1000) }, 1200)
   }
 
   if (!open) return null
@@ -853,7 +1052,7 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
         <div className="payment-header">
           <span className="eyebrow">PAYMENT</span>
           <h2>{t.payNowTitle}</h2>
-          <p>{t.payNowSub}</p>
+          <p>{t.paymentMethodSub}</p>
           <div className="payment-amount"><span>{t.payAmount}</span><strong>${amount.toFixed(2)}</strong></div>
         </div>
 
@@ -878,11 +1077,12 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
           <button type="button" className="text-button" onClick={() => onClose()}><ArrowLeft size={14} />{t.backToMenu}</button>
         </div>}
 
-        {method !== 'cash' && <div className="payment-qr">
-          <div className="qr-box"><img src={PAYMENT_QR[method as 'wechat']} alt={method === 'wechat' ? t.payWithWechat : t.payWithAlipay} /></div>
-          <p>{t.qrCodeTip}</p>
-          {qrExpired && <div className="qr-expired-note">{t.qrCodeExpired}</div>}
-          <button className="button button-dark full pay-submit" onClick={handleQrPaid}>{t.iHavePaid}</button>
+        {method !== 'cash' && <div className="payment-redirect-cta">
+          <div className="payment-redirect-icon"><QrCode size={40} /></div>
+          <p>{t.paymentPageSub}</p>
+          <button className="button button-dark full pay-submit" onClick={() => onSuccess(TO_BACKEND_METHOD[method])}>
+            <QrCode size={16} />{t.payNow}
+          </button>
           <button type="button" className="text-button" onClick={() => onClose()}><ArrowLeft size={14} />{t.backToMenu}</button>
         </div>}
       </>}
@@ -892,6 +1092,181 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
       {state === 'failed' && <div className="payment-status failed"><X size={48} /><h3>{t.payFailed}</h3><p>{t.payFailedSub}</p><button className="button button-dark" onClick={() => setState('selecting')}>{t.retry}</button></div>}
     </div>
   </div>
+}
+
+function CouponPopup({ open, t, coupons, loading, claimingId, claimedCoupon, onClaim, onDecline }: {
+  open: boolean
+  t: any
+  coupons: Coupon[]
+  loading: boolean
+  claimingId: number | null
+  claimedCoupon: ClaimedCoupon | null
+  onClaim: (coupon: Coupon) => void
+  onDecline: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="coupon-layer" role="dialog" aria-modal="true">
+      <button className="coupon-backdrop" onClick={onDecline} aria-label={t.close} />
+      <div className="coupon-modal">
+        <button className="coupon-close" onClick={onDecline} aria-label={t.close}><X size={18} /></button>
+        <div className="coupon-modal-head">
+          <span className="eyebrow">{t.couponPopupEyebrow}</span>
+          <div className="coupon-modal-icon"><Tag size={26} /></div>
+          <h2>{t.couponPopupTitle}</h2>
+          <p>{t.couponPopupBody}</p>
+        </div>
+        <div className="coupon-list">
+          {loading ? (
+            <div className="coupon-list-empty"><LoaderCircle size={22} className="spin" /><span>{t.brewing}</span></div>
+          ) : coupons.length === 0 ? (
+            <div className="coupon-list-empty"><Tag size={22} /><span>{t.couponListEmpty}</span></div>
+          ) : coupons.map(coupon => {
+            const isClaimed = claimedCoupon?.coupon_id === coupon.coupon_id
+            const isClaiming = claimingId === coupon.coupon_id
+            const soldOut = coupon.remaining_claims !== null && coupon.remaining_claims <= 0 && !isClaimed
+            return (
+              <article key={coupon.coupon_id} className={isClaimed ? 'coupon-item is-claimed' : soldOut ? 'coupon-item is-sold-out' : 'coupon-item'}>
+                <div className="coupon-item-notch left" /><div className="coupon-item-notch right" />
+                <div className="coupon-item-head">
+                  <span className="coupon-item-code">{coupon.code}</span>
+                  <strong className="coupon-item-percent">{Number(coupon.discount_percent)}% OFF</strong>
+                </div>
+                <div className="coupon-item-body">
+                  <h3>{coupon.title}</h3>
+                  {coupon.description && <p>{coupon.description}</p>}
+                </div>
+                <div className="coupon-item-foot">
+                  {coupon.remaining_claims !== null && (
+                    <small className="coupon-item-remaining">
+                      {soldOut ? t.couponSoldOut : t.couponRemaining.replace('{n}', String(coupon.remaining_claims))}
+                    </small>
+                  )}
+                  {isClaimed ? (
+                    <span className="coupon-item-claimed-badge"><Check size={14} />{t.couponActiveBadge}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="button button-dark button-mini"
+                      disabled={isClaiming || soldOut}
+                      onClick={() => onClaim(coupon)}
+                    >
+                      {isClaiming ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
+                      {soldOut ? t.couponSoldOut : t.couponClaimCta}
+                    </button>
+                  )}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+        <div className="coupon-actions">
+          <button type="button" className="text-button coupon-decline" onClick={onDecline}>{t.couponDeclineCta}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PaymentPage({ t }: { t: any }) {
+  const navigate = useNavigate()
+  const params = useMemo(() => new URLSearchParams(window.location.search), [])
+  const orderId = Number(params.get('order'))
+  const method = (params.get('method') as 'wechat' | 'alipay') || 'wechat'
+
+  const [order, setOrder] = useState<Order | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [paid, setPaid] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState('')
+  const [minutesLeft, setMinutesLeft] = useState(15)
+
+  // Fetch the order and keep polling until the backend reports it paid.
+  useEffect(() => {
+    if (!orderId) { setLoading(false); return }
+    let alive = true
+    const fetchOrder = async (): Promise<Order | null> => {
+      try {
+        const o = await api.getOrder(orderId)
+        if (!alive) return null
+        setOrder(o)
+        setLoading(false)
+        if (o.payment_status === 'paid') setPaid(true)
+        return o
+      } catch (err) {
+        if (alive) { setError(err instanceof Error ? err.message : t.apiOffline); setLoading(false) }
+        return null
+      }
+    }
+    void fetchOrder()
+    const id = window.setInterval(async () => {
+      const o = await fetchOrder()
+      if (o && o.payment_status === 'paid') window.clearInterval(id)
+    }, 2500)
+    return () => { alive = false; window.clearInterval(id) }
+  }, [orderId, t.apiOffline])
+
+  // Countdown the held order window.
+  useEffect(() => {
+    if (paid || !orderId) return
+    const id = window.setInterval(() => setMinutesLeft(m => (m > 0 ? m - 1 : 0)), 60000)
+    return () => window.clearInterval(id)
+  }, [paid, orderId])
+
+  // Redirect to the account page once payment is confirmed.
+  useEffect(() => {
+    if (!paid) return
+    const id = window.setTimeout(() => navigate('/account'), 1800)
+    return () => window.clearTimeout(id)
+  }, [paid, navigate])
+
+  const confirmPaid = async () => {
+    setConfirming(true)
+    try {
+      const o = await api.payOrder(orderId)
+      setOrder(o)
+      if (o.payment_status === 'paid') setPaid(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  if (!orderId) return (
+    <section className="page-section"><div className="container narrow-page"><div className="empty-state compact"><QrCode size={32} /><h2>{t.paymentPageMissingOrder}</h2><button className="button button-dark" onClick={() => navigate('/')}>{t.paymentPageBack}</button></div></div></section>
+  )
+
+  const amount = order ? Number(order.total_amount) : 0
+
+  return (
+    <section className="page-section payment-page"><div className="container narrow-page">
+      <div className="page-title"><span className="eyebrow">PAYMENT</span><h1>{t.paymentPageTitle}</h1><p>{t.paymentPageSub}</p></div>
+      {loading ? <LoadingBlock text={t.brewing} /> : paid ? (
+        <div className="payment-status success"><Check size={56} /><h2>{t.paymentPagePaidTitle}</h2><p>{t.paymentPagePaidSub}</p><p className="payment-redirect"><LoaderCircle className="spin" size={15} />{t.paymentPageRedirecting}</p></div>
+      ) : (
+        <div className="payment-page-card">
+          <div className="payment-page-summary">
+            <div className="payment-page-row"><span>{t.paymentPageOrderLabel}</span><strong>#{orderId}</strong></div>
+            <div className="payment-page-row"><span>{t.paymentPageAmount}</span><strong>${amount.toFixed(2)}</strong></div>
+            <div className="payment-page-row"><span>{t.paymentPageExpiresIn}</span><strong>{minutesLeft} {t.paymentPageMinutes}</strong></div>
+          </div>
+          <div className="payment-qr">
+            <div className="qr-box"><img src={PAYMENT_QR[method]} alt={method === 'wechat' ? t.payWithWechat : t.payWithAlipay} /></div>
+            <p className="qr-method-name">{method === 'wechat' ? t.payWithWechat : t.payWithAlipay}</p>
+            <p>{t.qrCodeTip}</p>
+          </div>
+          <div className="payment-page-actions">
+            <button className="button button-dark full" disabled={confirming} onClick={confirmPaid}>
+              {confirming ? <><LoaderCircle className="spin" size={15} />{t.paymentPageConfirming}</> : <><Check size={16} />{t.paymentPageConfirm}</>}
+            </button>
+            <button type="button" className="text-button" onClick={() => navigate('/')}><ArrowLeft size={14} />{t.paymentPageBack}</button>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+        </div>
+      )}
+    </div></section>
+  )
 }
 
 function usePath() {

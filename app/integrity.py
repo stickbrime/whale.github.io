@@ -16,6 +16,7 @@ def prepare_database(engine: Engine) -> None:
 
     with engine.begin() as connection:
         _ensure_order_payment_method_column(connection)
+        _ensure_product_image_url_column(connection)
 
         # Preserve recoverable records rather than deleting them. Invalid user-entered
         # dates are replaced with safe defaults; malformed optional times become NULL.
@@ -151,3 +152,11 @@ def _ensure_order_payment_method_column(connection) -> None:
         connection.exec_driver_sql(
             "ALTER TABLE orders ADD COLUMN pickup_code VARCHAR(10) NULL"
         )
+
+
+def _ensure_product_image_url_column(connection) -> None:
+    """Add the image_url column to a pre-existing products table if missing."""
+    rows = connection.exec_driver_sql("PRAGMA table_info(products)").fetchall()
+    existing = {r[1] for r in rows}
+    if "image_url" not in existing:
+        connection.exec_driver_sql("ALTER TABLE products ADD COLUMN image_url TEXT NULL")

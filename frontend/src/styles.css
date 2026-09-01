@@ -343,6 +343,19 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .admin-form input:focus,.admin-form select:focus{outline:none;border-color:var(--forest)}
 .admin-form select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233a3631' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px}
 .admin-form button{margin-top:6px}
+.admin-image-field{display:flex;flex-direction:column;gap:6px;margin:10px 0 4px}
+.admin-image-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--forest)}
+.admin-image-hint{font-size:10px;color:var(--muted);margin-top:-2px}
+.admin-image-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;min-height:130px;padding:22px;border:1.5px dashed var(--line);border-radius:6px;background:var(--paper);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:.16s}
+.admin-image-drop:hover{border-color:var(--forest-soft);color:var(--forest);background:var(--paper-deep)}
+.admin-image-drop.is-busy{cursor:default;color:var(--forest)}
+.admin-image-drop svg{color:var(--gold)}
+.admin-image-preview{display:flex;align-items:flex-start;gap:14px;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
+.admin-image-preview img{width:96px;height:96px;object-fit:cover;border-radius:4px;flex-shrink:0;background:#fff}
+.admin-image-actions{display:flex;flex-direction:column;gap:6px}
+.admin-product-thumb{width:38px;height:38px;object-fit:cover;border-radius:3px;flex-shrink:0;background:#fff}
+.admin-table td.product-cell{display:flex;align-items:center;gap:10px}
+.admin-table td.product-cell div{min-width:0}
 .button-ghost{background:none;color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:2px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s}
 .button-ghost:hover{background:var(--cream)}
 .button-danger{background:var(--danger);color:#fff;border:none;padding:8px 12px;border-radius:2px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s}
@@ -383,4 +396,91 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .settle-note{margin:0;font-size:9px;line-height:1.5;color:rgba(255,255,255,.5)}
 .button-mini{min-height:36px;padding:0 14px;font-size:10px;letter-spacing:.05em;border-radius:2px}
 .spin{animation:spin 1s linear infinite}
+
+/* ---------- Coupon: floating button + popup ---------- */
+.coupon-fab{position:fixed;right:22px;bottom:22px;z-index:60;display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border:0;border-radius:40px;color:var(--cream);background:var(--forest);box-shadow:0 14px 34px rgba(20,30,24,.28);cursor:pointer;font-size:11px;font-weight:600;letter-spacing:.04em;animation:pop-in .3s ease}
+.coupon-fab:hover{background:var(--forest-soft);transform:translateY(-2px)}
+.coupon-fab span{font-size:11px}
+.coupon-layer{position:fixed;z-index:140;inset:0;display:grid;place-items:center;padding:20px}
+.coupon-backdrop{position:absolute;inset:0;border:0;background:rgba(18,27,22,.55);animation:fade-in .2s ease}
+.coupon-modal{position:relative;width:min(560px,100%);max-height:92vh;padding:40px 34px 28px;overflow-y:auto;background:var(--cream);box-shadow:var(--shadow);animation:pop-in .25s ease;border-radius:6px}
+.coupon-close{position:absolute;top:14px;right:14px;width:34px;height:34px;display:grid;place-items:center;border:0;background:var(--paper-deep);border-radius:50%;cursor:pointer}
+.coupon-close:hover{background:var(--line)}
+.coupon-modal-head{text-align:center;margin-bottom:22px}
+.coupon-modal-icon{width:52px;height:52px;margin:10px auto 12px;display:grid;place-items:center;color:var(--cream);background:var(--forest);border-radius:50% 50% 47% 53%/55% 45% 55% 45%;transform:rotate(-8deg)}
+.coupon-modal-icon svg{transform:rotate(8deg)}
+.coupon-modal-head h2{margin:6px 0 6px;font-family:var(--serif);font-size:28px;font-weight:500}
+.coupon-modal-head p{margin:0;color:var(--muted);font-size:11px;line-height:1.55}
+.coupon-list{display:grid;gap:14px;margin-bottom:18px}
+.coupon-list-empty{padding:34px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);font-size:11px}
+.coupon-list-empty svg{color:var(--gold);opacity:.6}
+.coupon-item{position:relative;padding:18px 22px;background:var(--paper);border:1px dashed var(--line);border-radius:10px;display:grid;gap:10px;transition:.18s}
+.coupon-item:hover{border-color:var(--forest-soft);transform:translateY(-1px)}
+.coupon-item.is-claimed{border-color:var(--forest);background:rgba(38,61,50,.06)}
+.coupon-item.is-sold-out{opacity:.55}
+.coupon-item-notch{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:var(--cream);border:1px solid var(--line)}
+.coupon-item-notch.left{left:-9px;transform:translateY(-50%)}
+.coupon-item-notch.right{right:-9px;transform:translateY(-50%)}
+.coupon-item-head{display:flex;align-items:center;justify-content:space-between}
+.coupon-item-code{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.coupon-item-percent{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--forest)}
+.coupon-item-body h3{margin:0;font-size:12px;font-weight:700}
+.coupon-item-body p{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
+.coupon-item-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.coupon-item-remaining{color:var(--muted);font-size:9px}
+.coupon-item-claimed-badge{display:inline-flex;align-items:center;gap:5px;color:var(--forest);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.coupon-actions{display:flex;justify-content:center;padding-top:6px;border-top:1px solid var(--line)}
+.coupon-decline{color:var(--muted);font-size:10px}
+
+/* ---------- Coupon: home hero link + strip ---------- */
+.hero-coupon-link{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border:1px solid rgba(217,199,162,.5);border-radius:40px;background:rgba(18,28,22,.22);color:#f3e9d6;cursor:pointer;font-size:11px;font-weight:600;transition:.18s}
+.hero-coupon-link:hover{background:rgba(18,28,22,.36);border-color:#d9c7a2}
+.hero-coupon-badge{margin-left:2px;padding:2px 8px;border-radius:10px;color:var(--forest);background:#d9c9a2;font-size:9px;font-weight:700;letter-spacing:.04em}
+.home-coupon-strip{width:100%;margin-bottom:24px;padding:16px 20px;display:flex;align-items:center;gap:14px;border:1px solid var(--line);background:var(--cream);border-radius:8px;cursor:pointer;text-align:left;transition:.16s}
+.home-coupon-strip:hover{border-color:var(--forest-soft);box-shadow:0 10px 30px rgba(20,30,24,.08)}
+.home-coupon-strip-icon{width:38px;height:38px;display:grid;place-items:center;color:var(--cream);background:var(--forest);border-radius:50% 50% 47% 53%/55% 45% 55% 45%}
+.home-coupon-strip-copy{flex:1;display:flex;flex-direction:column;gap:3px}
+.home-coupon-strip-copy strong{font-size:12px;font-weight:700}
+.home-coupon-strip-copy small{color:var(--muted);font-size:10px}
+.home-coupon-strip-badge{padding:4px 10px;border-radius:12px;color:var(--cream);background:var(--gold);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+
+/* ---------- Coupon: shop banner + discounted prices ---------- */
+.coupon-banner{margin-bottom:20px;padding:14px 18px;display:flex;align-items:center;gap:14px;background:var(--forest);color:var(--cream);border-radius:8px}
+.coupon-banner-icon{width:36px;height:36px;display:grid;place-items:center;background:rgba(255,255,255,.12);border-radius:50%}
+.coupon-banner-copy{flex:1;display:flex;flex-direction:column;gap:2px}
+.coupon-banner-copy strong{font-size:12px;font-weight:700}
+.coupon-banner-copy span{font-size:10px;color:rgba(255,255,255,.7)}
+.coupon-banner-copy em{font-style:normal;color:#e9cf95;font-weight:600}
+.coupon-banner-remove{color:rgba(255,255,255,.78);font-size:9px;display:inline-flex;align-items:center;gap:5px}
+.coupon-banner-remove:hover{color:#fff}
+.catalog-discount-badge{position:absolute;top:12px;left:12px;z-index:2;padding:4px 10px;border-radius:12px;color:var(--cream);background:var(--gold);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.catalog-price{display:flex;align-items:baseline;gap:8px}
+.catalog-price .price-original{color:var(--muted);font-size:10px;text-decoration:line-through}
+.catalog-price strong{font-family:var(--serif);font-size:22px;font-weight:600}
+
+/* ---------- Coupon: checkout summary breakdown ---------- */
+.summary-coupon{margin:6px 0 10px;padding:12px 14px;border:1px dashed var(--line);border-radius:8px;background:rgba(38,61,50,.04)}
+.summary-coupon-line{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--forest)}
+.summary-coupon-line strong{font-size:10px;letter-spacing:.06em}
+.summary-line.discount span:last-child{color:var(--forest);font-weight:600}
+
+/* ---------- Payment page (/pay) ---------- */
+.payment-page .page-title{margin-bottom:24px;text-align:center}
+.payment-page-card{display:grid;gap:18px;padding:28px 24px;background:var(--cream);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.payment-page-summary{display:grid;gap:8px;padding:14px 16px;background:var(--paper);border-radius:8px}
+.payment-page-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.payment-page-row span{color:var(--muted);font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+.payment-page-row strong{font-family:var(--serif);font-size:18px;font-weight:500}
+.payment-qr{padding:8px 0 4px;text-align:center}
+.payment-qr .qr-method-name{margin:0 0 2px;font-family:var(--serif);font-size:18px;font-weight:600;color:var(--forest)}
+.payment-page-actions{display:grid;gap:8px;margin-top:4px}
+.payment-status.success{padding:46px 10px 30px}
+.payment-status.success h2{margin:12px 0 4px;font-family:var(--serif);font-size:26px;font-weight:500}
+.payment-status.success p{margin:0;color:var(--muted);font-size:11px}
+.payment-redirect{margin-top:14px;display:inline-flex;align-items:center;gap:7px;color:var(--forest);font-size:9px;letter-spacing:.04em}
+
+/* Payment modal: wechat/alipay redirect CTA */
+.payment-redirect-cta{padding:20px 6px 4px;text-align:center}
+.payment-redirect-icon{width:60px;height:60px;margin:0 auto 14px;display:grid;place-items:center;color:var(--cream);background:var(--forest);border-radius:50%}
+.payment-redirect-cta p{margin:0 0 14px;color:var(--muted);font-size:11px;line-height:1.55}
 @keyframes spin{to{transform:rotate(360deg)}}
