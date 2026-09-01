@@ -1,0 +1,13 @@
+nohup: ignoring input
+
+> whale-coffee-shop@1.0.0 dev
+> vite --host 0.0.0.0
+
+Port 5173 is in use, trying another one...
+Port 5174 is in use, trying another one...
+Port 5175 is in use, trying another one...
+
+  VITE v8.1.5  ready in 202 ms
+
+  ➜  Local:   http://localhost:5176/
+  ➜  Network: http://10.0.0.4:5176/

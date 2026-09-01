@@ -17,7 +17,6 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -92,7 +91,7 @@ class Order(Base):
 
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     order_date: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
+        DateTime, default=datetime.now, nullable=False
     )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(20), default="wechat", nullable=False)
@@ -157,39 +156,4 @@ class OrderItem(Base):
         CheckConstraint("quantity > 0", name="ck_order_item_quantity_positive"),
         CheckConstraint("unit_price >= 0", name="ck_order_item_price_nonnegative"),
         CheckConstraint("subtotal >= 0", name="ck_order_item_subtotal_nonnegative"),
-    )
-
-
-class Coupon(Base):
-    """A claimable discount coupon shown to customers on the storefront."""
-
-    __tablename__ = "coupons"
-
-    coupon_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    title: Mapped[str] = mapped_column(String(150), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    discount_percent: Mapped[Decimal] = mapped_column(
-        Numeric(5, 2), nullable=False, default=Decimal("0.00")
-    )
-    is_active: Mapped[bool] = mapped_column(Integer, default=1, nullable=False)
-    valid_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    valid_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    max_claims: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    claimed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "discount_percent >= 0 AND discount_percent <= 100",
-            name="ck_coupon_discount_range",
-        ),
-        CheckConstraint("is_active IN (0, 1)", name="ck_coupon_active_bool"),
-        CheckConstraint("claimed_count >= 0", name="ck_coupon_claimed_nonnegative"),
-        CheckConstraint(
-            "max_claims IS NULL OR max_claims >= 0", name="ck_coupon_max_claims_nonnegative"
-        ),
     )

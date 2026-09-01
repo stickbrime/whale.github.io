@@ -4,6 +4,9 @@ SQLAlchemy==2.0.41
 pydantic[email]==2.11.7
 python-dotenv==1.1.1
 
+# Receipt printer (USB serial / ESC-POS)
+pyserial==3.5
+
 # Development and testing
 pytest==8.4.1
 httpx==0.28.1

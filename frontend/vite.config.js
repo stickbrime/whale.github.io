@@ -4,9 +4,11 @@ export default defineConfig({
     plugins: [react()],
     server: {
         port: 5173,
+        host: '0.0.0.0',
+        allowedHosts: ['www.whalecoffeeshop.cloud', 'whalecoffeeshop.cloud'],
         proxy: {
-            '/api': 'http://127.0.0.1:8000',
-            '/health': 'http://127.0.0.1:8000'
+            '/api': 'http://127.0.0.1:8002',
+            '/health': 'http://127.0.0.1:8002'
         }
     }
 });

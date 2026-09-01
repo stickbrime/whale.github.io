@@ -70,49 +70,8 @@ def seed_database() -> None:
                 hire_date=date.today(),
             )
         )
-
-        # A small series of demo coupons so the storefront list isn't empty on first run.
-        db.add_all(
-            [
-                models.Coupon(
-                    code="WHALE15",
-                    title="Welcome 15% off",
-                    description="A welcome gift — 15% off every product on the shop tab.",
-                    discount_percent=Decimal("15.00"),
-                    is_active=1,
-                    sort_order=1,
-                ),
-                models.Coupon(
-                    code="FRESH10",
-                    title="Fresh brew 10% off",
-                    description="New customers save 10% on their first fresh brew.",
-                    discount_percent=Decimal("10.00"),
-                    is_active=1,
-                    max_claims=500,
-                    sort_order=2,
-                ),
-                models.Coupon(
-                    code="BAKERY20",
-                    title="Bakery 20% off",
-                    description="Pair your coffee with a pastry — 20% off, limited claims.",
-                    discount_percent=Decimal("20.00"),
-                    is_active=1,
-                    max_claims=200,
-                    sort_order=3,
-                ),
-                models.Coupon(
-                    code="VIP25",
-                    title="VIP 25% off",
-                    description="Our deepest discount for returning friends — 25% off everything.",
-                    discount_percent=Decimal("25.00"),
-                    is_active=1,
-                    max_claims=50,
-                    sort_order=4,
-                ),
-            ]
-        )
         db.commit()
-        print("Demo categories, products, employee, and coupons created.")
+        print("Demo categories, products, and employee created.")
 
 
 if __name__ == "__main__":

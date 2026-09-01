@@ -24,23 +24,23 @@ python -m app.seed               # optional demo menu
 uvicorn app.main:app --reload
 ```
 
-Open the API documentation at <http://127.0.0.1:8000/docs>, alternative documentation
-at <http://127.0.0.1:8000/redoc>, or the health check at
-<http://127.0.0.1:8000/health>. The SQLite database is created automatically.
+Open the API documentation at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs), alternative documentation
+at [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc), or the health check at
+[http://127.0.0.1:8000/health](http://127.0.0.1:8000/health). The SQLite database is created automatically.
 
 ## API overview
 
 All business endpoints use the `/api/v1` prefix.
 
-| Resource | Main routes |
-| --- | --- |
-| Customers | `GET/POST /customers`, `GET/PATCH/DELETE /customers/{id}` |
-| Customer history | `GET /customers/{id}/orders` |
-| Employees | `GET/POST /employees`, `GET/PATCH/DELETE /employees/{id}` |
-| Categories | `GET/POST /categories`, `GET/PUT/DELETE /categories/{id}` |
-| Products | `GET/POST /products`, `GET/PATCH/DELETE /products/{id}` |
-| Inventory | `PATCH /products/{id}/stock` |
-| Orders | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}` |
+| Resource         | Main routes                                                   |
+| ---------------- | ------------------------------------------------------------- |
+| Customers        | `GET/POST /customers`, `GET/PATCH/DELETE /customers/{id}` |
+| Customer history | `GET /customers/{id}/orders`                                |
+| Employees        | `GET/POST /employees`, `GET/PATCH/DELETE /employees/{id}` |
+| Categories       | `GET/POST /categories`, `GET/PUT/DELETE /categories/{id}` |
+| Products         | `GET/POST /products`, `GET/PATCH/DELETE /products/{id}`   |
+| Inventory        | `PATCH /products/{id}/stock`                                |
+| Orders           | `GET/POST /orders`, `GET/PATCH/DELETE /orders/{id}`       |
 
 ### Create an order
 

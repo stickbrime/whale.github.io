@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session, selectinload
 from app import models, schemas
 from app.api.deps import require_admin
 from app.api.common import get_or_404
+from app.config import settings
 from app.database import get_db
+from app.receipt_printer import print_receipt
 
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -184,7 +186,22 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             detail="The order could not be created because related data changed",
         ) from exc
     db.refresh(order)
-    return order
+    result = print_receipt(
+        shop_name=settings.printer_shop_name,
+        order_id=order.order_id,
+        order_date=order.order_date,
+        customer_name=order.customer_name,
+        items=order.items,
+        total=order.total_amount,
+        payment_method=order.payment_method,
+        payment_status=order.payment_status,
+        pickup_code=order.pickup_code,
+        pickup_time=order.pickup_time.strftime("%H:%M") if order.pickup_time else None,
+    )
+    response = schemas.OrderRead.model_validate(order)
+    response.print_status = result["status"]
+    response.receipt_preview = result.get("receipt_preview")
+    return response
 
 
 @router.get("/customers/{customer_id}/credit-status", response_model=schemas.CreditStatus)

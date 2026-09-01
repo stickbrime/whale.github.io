@@ -1,0 +1,185 @@
+nohup: ignoring input
+INFO:     Will watch for changes in these directories: ['/home/ubuntu/whale.github.io-main']
+INFO:     Uvicorn running on http://0.0.0.0:8002 (Press CTRL+C to quit)
+INFO:     Started reloader process [110091] using WatchFiles
+INFO:     Started server process [110094]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     117.129.33.243:20299 - "GET /docs HTTP/1.1" 200 OK
+INFO:     117.129.33.243:20299 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/orders?limit=200 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "DELETE /api/v1/products/5 HTTP/1.1" 204 No Content
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "DELETE /api/v1/products/2 HTTP/1.1" 204 No Content
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/orders?limit=200 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/orders?limit=200 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.129.33.243:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.129.33.243:20264 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     220.196.160.144:46712 - "GET /api/v1/products/1 HTTP/1.1" 200 OK
+INFO:     59.83.208.105:0 - "GET /api/v1/products/5 HTTP/1.1" 404 Not Found
+INFO:     129.211.162.87:5653 - "GET /api/v1/products/4 HTTP/1.1" 200 OK
+INFO:     220.196.160.51:0 - "GET /api/v1/products/1 HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:51534 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     204.76.203.21:43342 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     220.196.160.76:46796 - "GET / HTTP/1.1" 200 OK
+INFO:     129.211.163.253:54018 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:49872 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49888 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49894 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49908 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49912 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49918 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     180.101.245.252:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     81.71.98.254:28692 - "GET /api/v1/products?skip=0&limit=100 HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.99:27174 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.99:27198 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.195.99:27248 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.195.99:27260 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.195.99:24004 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.195.99:24112 - "GET /.well-known/security.txt HTTP/1.1" 404 Not Found
+INFO:     172.236.228.224:36040 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.132:22500 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.132:63056 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.132:63074 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     66.132.172.132:63128 - "POST /mcp HTTP/1.1" 404 Not Found
+INFO:     66.132.172.132:45854 - "POST /jsonrpc HTTP/1.1" 404 Not Found
+INFO:     66.132.172.132:45862 - "POST / HTTP/1.1" 405 Method Not Allowed
+WARNING:  Invalid HTTP request received.
+INFO:     66.132.172.132:6108 - "GET /login HTTP/1.1" 404 Not Found
+INFO:     117.113.121.19:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.19:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     204.76.203.21:39818 - "GET / HTTP/1.1" 200 OK
+INFO:     195.96.139.239:54789 - "GET / HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.41.196:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     180.101.245.250:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     117.113.121.27:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "POST /api/v1/auth/login/manual HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/customers/1 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/customers/1/orders HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "POST /api/v1/orders/customers/1/settle-all HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/customers/1/orders HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/customers/1/orders HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/customers/1/orders HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     223.104.40.255:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     101.34.58.122:0 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     220.196.160.101:0 - "GET /api/v1/customers/1 HTTP/1.1" 200 OK

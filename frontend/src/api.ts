@@ -1,4 +1,4 @@
-import type { AuthStatus, Category, Coupon, CreditStatus, Customer, Order, Product } from './types'
+import type { AuthStatus, Category, CreditStatus, Customer, Order, Product } from './types'
 
 const API = '/api/v1'
 
@@ -69,17 +69,5 @@ export const api = {
     request<{ product_id: number; stock_quantity: number }>(`/products/${id}/stock`, {
       method: 'PATCH',
       body: JSON.stringify({ quantity_change })
-    }),
-
-  // Coupons: list the active catalogue and claim one (increments server-side counter).
-  coupons: () => request<Coupon[]>('/coupons'),
-  claimCoupon: (couponId: number) =>
-    request<{
-      coupon_id: number
-      code: string
-      title: string
-      description: string | null
-      discount_percent: number
-      message: string
-    }>(`/coupons/${couponId}/claim`, { method: 'POST' })
+    })
 }
