@@ -408,7 +408,7 @@ function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: a
       const original = Number(item.price)
       const finalPrice = discountPercent > 0 ? discountedPrice(original, discountPercent) : original
       return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} key={item.product_id} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
-        <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}{discountPercent > 0 && <span className="catalog-discount-badge">{t.couponDiscountBadge}</span>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
+        <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
         <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>${original.toFixed(2)}</span>}<strong>${finalPrice.toFixed(2)}</strong></div></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${finalPrice.toFixed(2)}</>}</button></div>
       </article>
     })}</div>}
@@ -484,13 +484,24 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
 
   const createOrder = async (id: number, method: BackendPayMethod) => {
     const tabNote = payment === 'pending' ? `[Tab: ${creditDays} days]` : ''
+    // Merge duplicate product_ids — the backend rejects orders with dupes.
+    const merged: Record<number, { product_id: number; quantity: number; customization: string | undefined }> = {}
+    for (const item of cart) {
+      const note = [item.customization, tabNote].filter(Boolean).join(' · ') || undefined
+      if (merged[item.product_id]) {
+        merged[item.product_id].quantity += item.quantity
+        if (note) merged[item.product_id].customization = [merged[item.product_id].customization, note].filter(Boolean).join(' · ') || undefined
+      } else {
+        merged[item.product_id] = { product_id: item.product_id, quantity: item.quantity, customization: note }
+      }
+    }
     const order = await api.createOrder({
       customer_id: id,
       pickup_time: pickup ? `${pickup}:00` : undefined,
       payment_method: method,
       payment_status: payment,
       credit_days: payment === 'pending' ? creditDays : undefined,
-      items: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity, customization: [item.customization, tabNote].filter(Boolean).join(' · ') || undefined }))
+      items: Object.values(merged)
     })
     if (payment === 'pending') {
       const terms = JSON.parse(localStorage.getItem('whale-tab-terms') || '{}')
@@ -525,12 +536,22 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
         // the dedicated /pay page, which shows the QR and polls until the
         // backend reports the order paid.
         const couponNote = claimedCoupon ? `[Coupon: ${claimedCoupon.code} -${Number(claimedCoupon.discount_percent)}%]` : ''
+        const merged: Record<number, { product_id: number; quantity: number; customization: string | undefined }> = {}
+        for (const item of cart) {
+          const note = [item.customization, couponNote].filter(Boolean).join(' · ') || undefined
+          if (merged[item.product_id]) {
+            merged[item.product_id].quantity += item.quantity
+            if (note) merged[item.product_id].customization = [merged[item.product_id].customization, note].filter(Boolean).join(' · ') || undefined
+          } else {
+            merged[item.product_id] = { product_id: item.product_id, quantity: item.quantity, customization: note }
+          }
+        }
         const order = await api.createOrder({
           customer_id: id,
           pickup_time: pickup ? `${pickup}:00` : undefined,
           payment_method: method,
           payment_status: 'pending',
-          items: cart.map(item => ({ product_id: item.product_id, quantity: item.quantity, customization: [item.customization, couponNote].filter(Boolean).join(' · ') || undefined }))
+          items: Object.values(merged)
         })
         clearCart()
         navigate(`/pay?order=${order.order_id}&method=${method}`)
@@ -1180,6 +1201,10 @@ function PaymentPage({ t }: { t: any }) {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const [minutesLeft, setMinutesLeft] = useState(15)
+  // Mandatory wait before the "I have paid" button unlocks.
+  // Users must scan the QR and let the gateway process payment first.
+  const [confirmUnlockedAt, setConfirmUnlockedAt] = useState<number | null>(null)
+  const [secondsUntilUnlock, setSecondsUntilUnlock] = useState(30)
 
   // Fetch the order and keep polling until the backend reports it paid.
   useEffect(() => {
@@ -1212,6 +1237,27 @@ function PaymentPage({ t }: { t: any }) {
     const id = window.setInterval(() => setMinutesLeft(m => (m > 0 ? m - 1 : 0)), 60000)
     return () => window.clearInterval(id)
   }, [paid, orderId])
+
+  // Lock the confirm button for the initial wait period after landing,
+  // so users cannot self-mark paid before the payment is actually processed.
+  useEffect(() => {
+    if (paid || !orderId) return
+    const start = Date.now() + secondsUntilUnlock * 1000
+    setConfirmUnlockedAt(start)
+    const tick = window.setInterval(() => {
+      const now = Date.now()
+      if (now >= start) {
+        window.clearInterval(tick)
+        setSecondsUntilUnlock(0)
+        return
+      }
+      setSecondsUntilUnlock(Math.ceil((start - now) / 1000))
+    }, 500)
+    return () => window.clearInterval(tick)
+  }, [paid, orderId])
+
+  // If the backend detects payment via polling, the paid UI auto-shows and
+  // redirects — no confirm button needed at that point.
 
   // Redirect to the account page once payment is confirmed.
   useEffect(() => {
@@ -1257,9 +1303,16 @@ function PaymentPage({ t }: { t: any }) {
             <p>{t.qrCodeTip}</p>
           </div>
           <div className="payment-page-actions">
-            <button className="button button-dark full" disabled={confirming} onClick={confirmPaid}>
-              {confirming ? <><LoaderCircle className="spin" size={15} />{t.paymentPageConfirming}</> : <><Check size={16} />{t.paymentPageConfirm}</>}
-            </button>
+            {secondsUntilUnlock > 0 ? (
+              <button className="button button-dark full" disabled>
+                <LoaderCircle className="spin" size={15} />
+                {t.paymentPageConfirmSoon} <em>{secondsUntilUnlock}s</em>
+              </button>
+            ) : (
+              <button className="button button-dark full" disabled={confirming} onClick={confirmPaid}>
+                {confirming ? <><LoaderCircle className="spin" size={15} />{t.paymentPageConfirming}</> : <><Check size={16} />{t.paymentPageConfirm}</>}
+              </button>
+            )}
             <button type="button" className="text-button" onClick={() => navigate('/')}><ArrowLeft size={14} />{t.paymentPageBack}</button>
           </div>
           {error && <div className="inline-error">{error}</div>}

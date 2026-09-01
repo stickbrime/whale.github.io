@@ -453,7 +453,6 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .coupon-banner-copy em{font-style:normal;color:#e9cf95;font-weight:600}
 .coupon-banner-remove{color:rgba(255,255,255,.78);font-size:9px;display:inline-flex;align-items:center;gap:5px}
 .coupon-banner-remove:hover{color:#fff}
-.catalog-discount-badge{position:absolute;top:12px;left:12px;z-index:2;padding:4px 10px;border-radius:12px;color:var(--cream);background:var(--gold);font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .catalog-price{display:flex;align-items:baseline;gap:8px}
 .catalog-price .price-original{color:var(--muted);font-size:10px;text-decoration:line-through}
 .catalog-price strong{font-family:var(--serif);font-size:22px;font-weight:600}
@@ -474,6 +473,7 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .payment-qr{padding:8px 0 4px;text-align:center}
 .payment-qr .qr-method-name{margin:0 0 2px;font-family:var(--serif);font-size:18px;font-weight:600;color:var(--forest)}
 .payment-page-actions{display:grid;gap:8px;margin-top:4px}
+.payment-page-actions em{font-style:normal;font-weight:700;opacity:.88;margin-left:5px}
 .payment-status.success{padding:46px 10px 30px}
 .payment-status.success h2{margin:12px 0 4px;font-family:var(--serif);font-size:26px;font-weight:500}
 .payment-status.success p{margin:0;color:var(--muted);font-size:11px}

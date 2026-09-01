@@ -123,12 +123,24 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             detail=f"Customer is locked ({reason}). Settle the tab before ordering again.",
         )
 
+    # Merge duplicate product_ids gracefully instead of rejecting with 422.
+    merged_items: Dict[int, schemas.OrderItemCreate] = {}
+    for item in payload.items:
+        if item.product_id in merged_items:
+            existing = merged_items[item.product_id]
+            merged_items[item.product_id] = schemas.OrderItemCreate(
+                product_id=item.product_id,
+                quantity=min(existing.quantity + item.quantity, 100),
+                customization=(
+                    " · ".join(filter(None, [existing.customization, item.customization]))
+                    or None
+                ),
+            )
+        else:
+            merged_items[item.product_id] = item
+    payload.items = list(merged_items.values())
+
     product_ids = [item.product_id for item in payload.items]
-    if len(product_ids) != len(set(product_ids)):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Each product may appear only once; increase its quantity instead",
-        )
 
     products = db.scalars(
         select(models.Product).where(models.Product.product_id.in_(product_ids))
