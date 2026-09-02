@@ -1201,10 +1201,6 @@ function PaymentPage({ t }: { t: any }) {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const [minutesLeft, setMinutesLeft] = useState(15)
-  // Mandatory wait before the "I have paid" button unlocks.
-  // Users must scan the QR and let the gateway process payment first.
-  const [confirmUnlockedAt, setConfirmUnlockedAt] = useState<number | null>(null)
-  const [secondsUntilUnlock, setSecondsUntilUnlock] = useState(30)
 
   // Fetch the order and keep polling until the backend reports it paid.
   useEffect(() => {
@@ -1227,7 +1223,7 @@ function PaymentPage({ t }: { t: any }) {
     const id = window.setInterval(async () => {
       const o = await fetchOrder()
       if (o && o.payment_status === 'paid') window.clearInterval(id)
-    }, 2500)
+    }, 1500)
     return () => { alive = false; window.clearInterval(id) }
   }, [orderId, t.apiOffline])
 
@@ -1238,26 +1234,9 @@ function PaymentPage({ t }: { t: any }) {
     return () => window.clearInterval(id)
   }, [paid, orderId])
 
-  // Lock the confirm button for the initial wait period after landing,
-  // so users cannot self-mark paid before the payment is actually processed.
-  useEffect(() => {
-    if (paid || !orderId) return
-    const start = Date.now() + secondsUntilUnlock * 1000
-    setConfirmUnlockedAt(start)
-    const tick = window.setInterval(() => {
-      const now = Date.now()
-      if (now >= start) {
-        window.clearInterval(tick)
-        setSecondsUntilUnlock(0)
-        return
-      }
-      setSecondsUntilUnlock(Math.ceil((start - now) / 1000))
-    }, 500)
-    return () => window.clearInterval(tick)
-  }, [paid, orderId])
+  // When the backend detects payment (via Admin "Mark as Paid" action or
+  // payment webhook), polling above flips paid → success UI auto-shows.
 
-  // If the backend detects payment via polling, the paid UI auto-shows and
-  // redirects — no confirm button needed at that point.
 
   // Redirect to the account page once payment is confirmed.
   useEffect(() => {
@@ -1302,17 +1281,14 @@ function PaymentPage({ t }: { t: any }) {
             <p className="qr-method-name">{method === 'wechat' ? t.payWithWechat : t.payWithAlipay}</p>
             <p>{t.qrCodeTip}</p>
           </div>
+          <div className="payment-monitor">
+            <LoaderCircle className="spin pulse" size={14} />
+            <span>{t.paymentPageMonitoring}</span>
+          </div>
           <div className="payment-page-actions">
-            {secondsUntilUnlock > 0 ? (
-              <button className="button button-dark full" disabled>
-                <LoaderCircle className="spin" size={15} />
-                {t.paymentPageConfirmSoon} <em>{secondsUntilUnlock}s</em>
-              </button>
-            ) : (
-              <button className="button button-dark full" disabled={confirming} onClick={confirmPaid}>
-                {confirming ? <><LoaderCircle className="spin" size={15} />{t.paymentPageConfirming}</> : <><Check size={16} />{t.paymentPageConfirm}</>}
-              </button>
-            )}
+            <button className="button button-dark full" disabled={confirming} onClick={confirmPaid}>
+              {confirming ? <><LoaderCircle className="spin" size={15} />{t.paymentPageConfirming}</> : <><Check size={16} />{t.paymentPageConfirm}</>}
+            </button>
             <button type="button" className="text-button" onClick={() => navigate('/')}><ArrowLeft size={14} />{t.paymentPageBack}</button>
           </div>
           {error && <div className="inline-error">{error}</div>}

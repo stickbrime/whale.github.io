@@ -472,6 +472,9 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .payment-page-row strong{font-family:var(--serif);font-size:18px;font-weight:500}
 .payment-qr{padding:8px 0 4px;text-align:center}
 .payment-qr .qr-method-name{margin:0 0 2px;font-family:var(--serif);font-size:18px;font-weight:600;color:var(--forest)}
+.payment-monitor{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;margin:4px 0 2px;background:#e9f1ec;border:1px solid #cfe0d5;border-radius:8px;color:#2f5a45;font-size:11px;letter-spacing:.02em}
+.payment-monitor svg{color:#36664c}
+.payment-monitor .pulse{animation-duration:.9s}
 .payment-page-actions{display:grid;gap:8px;margin-top:4px}
 .payment-page-actions em{font-style:normal;font-weight:700;opacity:.88;margin-left:5px}
 .payment-status.success{padding:46px 10px 30px}
