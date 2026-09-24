@@ -9415,3 +9415,40 @@ INFO:     127.0.0.1:64506 - "GET /api/v1/customers/6 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:64511 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
 INFO:     127.0.0.1:64514 - "GET /api/v1/customers/6/orders HTTP/1.1" 200 OK
 INFO:     127.0.0.1:51559 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64403 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64404 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64402 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64405 - "GET /api/v1/categories HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64406 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64407 - "GET /api/v1/products?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64410 - "GET /api/v1/coupons HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64450 - "POST /api/v1/orders HTTP/1.1" 201 Created
+INFO:     127.0.0.1:64453 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64456 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64460 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64467 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64474 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64477 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64481 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64484 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64488 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64491 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64497 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64500 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64504 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64507 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64515 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64518 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64522 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64525 - "POST /api/v1/orders/11/pay HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64528 - "GET /api/v1/orders/11 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64534 - "GET /api/v1/customers/6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64535 - "GET /api/v1/customers/6/orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64538 - "GET /api/v1/customers/6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64541 - "GET /api/v1/customers/6/orders HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65088 - "GET /api/v1/auth/admin/status HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12710]
+INFO:     Stopping reloader process [12707]
