@@ -29,11 +29,12 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  TrendingUp,
   X
 } from 'lucide-react'
 import { api } from './api'
 import { copy } from './i18n'
-import type { AuthStatus, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, Order, Product } from './types'
+import type { AuthStatus, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, MarketOverview, MarketProductStat, Order, OverviewTimeseriesPoint, Product, ProductMarketDetail, ProductSaleRecord, ProductTimeseriesPoint } from './types'
 
 const productArt: Record<string, string> = {
   Espresso: 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?auto=format&fit=crop&w=900&q=82',
@@ -191,6 +192,8 @@ function App() {
   }
 
   const locked = Boolean(auth?.credit?.locked)
+  const marketMatch = path.match(/^\/market\/(\d+)$/)
+  const marketProductId = marketMatch ? Number(marketMatch[1]) : null
   const page = path === '/shop'
     ? <ShopPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onRemoveCoupon={removeCoupon} />
     : path === '/cart'
@@ -205,7 +208,11 @@ function App() {
           ? <AccountPage t={t} customerId={customerId} setCustomerId={setCustomerId} auth={auth} refreshAuth={refreshAuth} />
           : path === '/admin'
             ? <AdminPage t={t} />
-            : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onOpenCoupon={() => setCouponPopupOpen(true)} />
+            : path === '/market'
+              ? <Navigate to="/admin" replace />
+              : marketProductId !== null
+                ? <ProductMarketPage t={t} productId={marketProductId} />
+                : <OrderPage t={t} addToCart={addToCart} locked={locked} cart={cart} coupon={claimedCoupon} onOpenCoupon={() => setCouponPopupOpen(true)} />
 
   return (
     <div className="app-shell" lang={language === 'zh' ? 'zh-CN' : 'en'}>
@@ -737,7 +744,7 @@ function AdminPage({ t }: { t: any }) {
   const [loginUser, setLoginUser] = useState('')
   const [loginPass, setLoginPass] = useState('')
   const [loginErr, setLoginErr] = useState('')
-  const [tab, setTab] = useState<'orders' | 'products'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'market'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -889,6 +896,7 @@ function AdminPage({ t }: { t: any }) {
         <div className="admin-tabs">
           <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>{t.adminOrders}</button>
           <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>{t.adminProducts}</button>
+          <button className={tab === 'market' ? 'active' : ''} onClick={() => setTab('market')}>{t.marketNav}</button>
         </div>
 
         {loading ? <div className="settle-empty-mini"><LoaderCircle className="spin" /></div> :
@@ -947,7 +955,7 @@ function AdminPage({ t }: { t: any }) {
               </table>
             </div>}
           </section>
-        ) : (
+        ) : tab === 'products' ? (
           <section className="admin-section">
             <form className="admin-form" onSubmit={handleCreateProduct}>
               <h3>{t.adminNewProduct ?? 'New product'}</h3>
@@ -1025,6 +1033,8 @@ function AdminPage({ t }: { t: any }) {
               </table>
             </div>
           </section>
+        ) : (
+          <MarketPage t={t} />
         )}
       </div>
     </div>
@@ -1296,6 +1306,428 @@ function PaymentPage({ t }: { t: any }) {
       )}
     </div></section>
   )
+}
+
+function MarketPage({ t }: { t: any }) {
+  const [overview, setOverview] = useState<MarketOverview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState('')
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
+  const [metric, setMetric] = useState<'revenue' | 'units' | 'orders'>('revenue')
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const [range, setRange] = useState<string>('7d')
+
+  const RANGE_LABELS: Record<string, string> = {
+    '1d': t.marketRange1d, '7d': t.marketRange7d, '30d': t.marketRange30d,
+    '90d': t.marketRange90d, '365d': t.marketRange365d, 'all': t.marketRangeAll,
+  }
+  const RANGE_KEYS = ['1d', '7d', '30d', '90d', '365d', 'all']
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true) } else { setRefreshing(true) }
+    setError('')
+    try {
+      const data = await api.marketOverview(range)
+      setOverview(data)
+      setRefreshedAt(new Date())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally {
+      setLoading(false); setRefreshing(false)
+    }
+  }, [t.apiOffline, range])
+
+  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const id = window.setInterval(() => { void load(true) }, 8000)
+    return () => window.clearInterval(id)
+  }, [load])
+
+  const fmtMoney = (n: string | number) => `$${Number(n).toFixed(2)}`
+  const fmtDate = (s: string | null) => {
+    if (!s) return t.marketNever
+    const d = new Date(s)
+    if (Number.isNaN(d.getTime())) return t.marketNever
+    return d.toLocaleString()
+  }
+
+  if (loading && !overview) return <div className="settle-empty-mini"><LoaderCircle className="spin" /></div>
+
+  return (
+    <div className="market-tab-content">
+      {refreshedAt && (
+        <div className="market-refreshed">
+          <span className={`market-refreshed-dot ${refreshing ? 'pulse' : ''}`} />
+          {refreshing ? t.marketRefreshing : `${t.marketRefreshed} ${refreshedAt.toLocaleTimeString()}`}
+        </div>
+      )}
+
+      {error && !overview ? (
+        <ErrorBlock text={error} retry={() => load()} t={t} />
+      ) : overview ? (
+        <>
+          <div className="admin-stats">
+            <div className="admin-stat"><strong>{fmtMoney(overview.total_revenue)}</strong><span>{t.marketRevenue}</span></div>
+            <div className="admin-stat"><strong>{overview.total_units}</strong><span>{t.marketUnits}</span></div>
+            <div className="admin-stat"><strong>{overview.paid_orders}</strong><span>{t.marketOrders}</span></div>
+            <div className="admin-stat"><strong>{overview.product_count}</strong><span>{t.marketProducts}</span></div>
+          </div>
+
+          <section className="admin-section market-chart-card">
+            <div className="market-chart-head">
+              <h3 className="market-card-title">{t.marketTimeseries}</h3>
+              <div className="market-chart-controls">
+                <div className="market-range-toggle">
+                  {RANGE_KEYS.map(k => (
+                    <button key={k} className={range === k ? 'active' : ''} onClick={() => setRange(k)}>
+                      {RANGE_LABELS[k]}
+                    </button>
+                  ))}
+                </div>
+                <div className="market-metric-toggle">
+                  {(['revenue', 'units', 'orders'] as const).map(m => (
+                    <button key={m} className={metric === m ? 'active' : ''} onClick={() => setMetric(m)}>
+                      {m === 'revenue' ? t.marketRevenue : m === 'units' ? t.marketUnits : t.marketOrders}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="market-chart-range-label">{RANGE_LABELS[range]}</div>
+            <OverviewChart points={overview.timeseries} metric={metric} hoverIdx={hoverIdx} setHoverIdx={setHoverIdx} t={t} fmtMoney={fmtMoney} />
+          </section>
+
+          {overview.products.length === 0 ? (
+            <div className="empty-state compact">
+              <Coffee />
+              <h2>{t.marketEmpty}</h2>
+              <p>{t.marketEmptySub}</p>
+            </div>
+          ) : (
+            <section className="admin-section">
+              <div className="admin-table-wrap">
+                <table className="admin-table market-table">
+                  <thead>
+                    <tr>
+                      <th>{t.marketProductCol}</th>
+                      <th>{t.marketCategoryCol}</th>
+                      <th className="num">{t.marketPrice}</th>
+                      <th className="num">{t.marketStock}</th>
+                      <th className="num">{t.marketUnitsCol}</th>
+                      <th className="num">{t.marketRevenueCol}</th>
+                      <th className="num">{t.marketOrdersCol}</th>
+                      <th>{t.marketLastSold}</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.products.map(p => (
+                      <tr key={p.product_id} className={p.stock_quantity < 10 ? 'row-low-stock' : ''}>
+                        <td>
+                          <div className="market-product-cell">
+                            {p.image_url ? <img src={p.image_url} alt="" /> : <span className="market-thumb-fallback"><Coffee size={14} /></span>}
+                            <strong>{p.product_name}</strong>
+                          </div>
+                        </td>
+                        <td>{p.category_name ?? '—'}</td>
+                        <td className="num">{fmtMoney(p.price)}</td>
+                        <td className="num">{p.stock_quantity}</td>
+                        <td className="num">{p.units_sold}</td>
+                        <td className="num">{fmtMoney(p.revenue)}</td>
+                        <td className="num">{p.order_count}</td>
+                        <td><small>{fmtDate(p.last_sold_at)}</small></td>
+                        <td><Link className="button button-ghost button-mini" to={`/market/${p.product_id}`}>{t.marketViewDetail}<ArrowRight size={12} /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function ProductMarketPage({ t, productId }: { t: any; productId: number }) {
+  const [detail, setDetail] = useState<ProductMarketDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState('')
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
+  const navigate = useNavigate()
+  const [adminAuthed, setAdminAuthed] = useState(false)
+  const [adminChecking, setAdminChecking] = useState(true)
+
+  // Gate the standalone /market/:id route behind admin auth so market data
+  // is never exposed to ordinary storefront visitors.
+  useEffect(() => {
+    api.adminStatus()
+      .then(s => { setAdminAuthed(s.authenticated); setAdminChecking(false) })
+      .catch(() => { setAdminAuthed(false); setAdminChecking(false) })
+  }, [])
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true) } else { setRefreshing(true) }
+    setError('')
+    try {
+      const data = await api.productMarketDetail(productId)
+      setDetail(data)
+      setRefreshedAt(new Date())
+    } catch (err: any) {
+      if (/404|not found/i.test(err.message || '')) {
+        setError(t.marketProductMissing)
+      } else {
+        setError(err?.message || t.apiOffline)
+      }
+    } finally {
+      setLoading(false); setRefreshing(false)
+    }
+  }, [productId, t.apiOffline, t.marketProductMissing])
+
+  useEffect(() => { if (adminAuthed) void load() }, [load, adminAuthed])
+  useEffect(() => {
+    if (!adminAuthed) return
+    const id = window.setInterval(() => { void load(true) }, 5000)
+    return () => window.clearInterval(id)
+  }, [load, adminAuthed])
+
+  const fmtMoney = (n: string | number) => `$${Number(n).toFixed(2)}`
+  const fmtDateTime = (s: string | null) => {
+    if (!s) return t.marketNever
+    const d = new Date(s)
+    if (Number.isNaN(d.getTime())) return t.marketNever
+    return d.toLocaleString()
+  }
+
+  const chart = detail ? buildTimeseriesChart(detail.timeseries) : null
+  const avgPerOrder = detail && detail.order_count > 0 ? detail.units_sold / detail.order_count : 0
+
+  if (adminChecking) return <div className="page-section"><div className="container"><LoadingBlock text={t.brewing} /></div></div>
+  if (!adminAuthed) return (
+    <div className="page-section">
+      <div className="container" style={{ maxWidth: 420 }}>
+        <div className="page-title">
+          <span className="eyebrow"><LockKeyhole size={13} /> {t.admin}</span>
+          <h1>{t.marketDetailTitle}</h1>
+          <p>{t.loginRequired}</p>
+        </div>
+        <button className="button button-dark" onClick={() => navigate('/admin')}>{t.admin}</button>
+      </div>
+    </div>
+  )
+  if (loading && !detail) return <div className="page-section"><div className="container"><LoadingBlock text={t.brewing} /></div></div>
+
+  return (
+    <div className="page-section market-page">
+      <div className="container">
+        <div className="page-title">
+          <span className="eyebrow"><TrendingUp size={13} /> {t.marketNav}</span>
+          <h1>{detail?.product_name ?? t.marketDetailTitle}</h1>
+          <p>{t.marketDetailSubtitle}</p>
+          <button type="button" className="button button-ghost button-mini" style={{ marginTop: 8 }} onClick={() => navigate('/admin')}>
+            <ArrowLeft size={12} /> {t.marketBack}
+          </button>
+          {refreshedAt && (
+            <div className="market-refreshed">
+              <span className={`market-refreshed-dot ${refreshing ? 'pulse' : ''}`} />
+              {refreshing ? t.marketRefreshing : `${t.marketRefreshed} ${refreshedAt.toLocaleTimeString()}`}
+            </div>
+          )}
+        </div>
+
+        {error && !detail ? (
+          <ErrorBlock text={error} retry={() => load()} t={t} />
+        ) : detail ? (
+          <>
+            <div className="admin-stats">
+              <div className="admin-stat"><strong>{fmtMoney(detail.revenue)}</strong><span>{t.marketRevenue}</span></div>
+              <div className="admin-stat"><strong>{detail.units_sold}</strong><span>{t.marketUnitsSold}</span></div>
+              <div className="admin-stat"><strong>{detail.order_count}</strong><span>{t.marketOrders}</span></div>
+              <div className="admin-stat"><strong>{avgPerOrder.toFixed(1)}</strong><span>{t.marketPerOrder}</span></div>
+            </div>
+
+            <div className="market-detail-grid">
+              <section className="admin-section market-chart-card">
+                <h3 className="market-card-title">{t.marketTimeseries}</h3>
+                {chart ? (
+                  <svg className="market-chart" viewBox={`0 0 ${chart.width} ${chart.height}`} preserveAspectRatio="none">
+                    {chart.bars.map((b, i) => (
+                      <rect key={`b-${i}`} x={b.x} y={b.y} width={b.w} height={b.h} fill="var(--gold)" rx="1" />
+                    ))}
+                    {chart.bars.map((b, i) => (
+                      <text key={`l-${i}`} x={b.x + b.w / 2} y={chart.height - 4} textAnchor="middle" className="market-chart-label">{b.label}</text>
+                    ))}
+                  </svg>
+                ) : (
+                  <p className="market-chart-empty">{t.marketNoRecent}</p>
+                )}
+              </section>
+
+              <section className="admin-section market-info-card">
+                <h3 className="market-card-title">{t.marketProductCol}</h3>
+                <dl className="market-info-list">
+                  <div><dt>{t.marketPrice}</dt><dd>{fmtMoney(detail.price)}</dd></div>
+                  <div><dt>{t.marketStock}</dt><dd>{detail.stock_quantity}</dd></div>
+                  <div><dt>{t.marketCategoryCol}</dt><dd>{detail.category_name ?? '—'}</dd></div>
+                  <div><dt>{t.marketLastSold}</dt><dd>{fmtDateTime(detail.last_sold_at)}</dd></div>
+                </dl>
+              </section>
+            </div>
+
+            <section className="admin-section" style={{ marginTop: 24 }}>
+              <h3 className="market-card-title">{t.marketRecentSales}</h3>
+              {detail.recent_sales.length === 0 ? (
+                <p className="market-chart-empty">{t.marketNoRecent}</p>
+              ) : (
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{t.marketDateCol}</th>
+                        <th className="num">#{t.marketOrdersCol}</th>
+                        <th>{t.marketCustomerCol}</th>
+                        <th className="num">{t.marketQtyCol}</th>
+                        <th className="num">{t.marketSubtotalCol}</th>
+                        <th>{t.marketStatusCol}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.recent_sales.map(s => (
+                        <tr key={s.order_id}>
+                          <td><small>{new Date(s.order_date).toLocaleString()}</small></td>
+                          <td className="num">{s.order_id}</td>
+                          <td>{s.customer_name ?? '—'}</td>
+                          <td className="num">{s.quantity}</td>
+                          <td className="num">{fmtMoney(s.subtotal)}</td>
+                          <td><StatusPill status={s.payment_status} t={t} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function OverviewChart({ points, metric, hoverIdx, setHoverIdx, t, fmtMoney }: {
+  points: OverviewTimeseriesPoint[]
+  metric: 'revenue' | 'units' | 'orders'
+  hoverIdx: number | null
+  setHoverIdx: (i: number | null) => void
+  t: any
+  fmtMoney: (n: string | number) => string
+}) {
+  if (points.length === 0) return <p className="market-chart-empty">{t.marketNoRecent}</p>
+
+  const width = 720
+  const height = 230
+  const padL = 46
+  const padR = 16
+  const padT = 14
+  const padB = 30
+  const innerW = width - padL - padR
+  const innerH = height - padT - padB
+
+  const val = (p: OverviewTimeseriesPoint) => metric === 'revenue' ? Number(p.revenue) : metric === 'units' ? p.units : p.orders
+  const rawMax = Math.max(1, ...points.map(val))
+  const niceMax = niceCeil(rawMax)
+  const slot = innerW / points.length
+  const xAt = (i: number) => padL + i * slot + slot / 2
+  const yAt = (v: number) => padT + innerH - (v / niceMax) * innerH
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(2)} ${yAt(val(p)).toFixed(2)}`).join(' ')
+  const areaPath = `${linePath} L ${xAt(points.length - 1).toFixed(2)} ${padT + innerH} L ${xAt(0).toFixed(2)} ${padT + innerH} Z`
+
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => ({ y: padT + innerH - f * innerH, v: niceMax * f }))
+  const labelStep = Math.max(1, Math.floor(points.length / 6))
+  const hovered = hoverIdx !== null ? points[hoverIdx] : null
+  const hv = hovered ? val(hovered) : 0
+  const hx = hoverIdx !== null ? xAt(hoverIdx) : 0
+  const hy = hovered ? yAt(hv) : 0
+  const tipX = Math.min(Math.max(hx - 55, padL), width - padR - 110)
+  const tipY = Math.max(hy - 46, padT)
+
+  return (
+    <svg className="market-chart market-overview-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" onMouseLeave={() => setHoverIdx(null)} role="img" aria-label={t.marketTimeseries}>
+      <defs>
+        <linearGradient id="market-area-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#b3864b" stopOpacity="0.38" />
+          <stop offset="100%" stopColor="#b3864b" stopOpacity="0.03" />
+        </linearGradient>
+      </defs>
+      {ticks.map((tk, i) => (
+        <g key={i}>
+          <line x1={padL} y1={tk.y} x2={width - padR} y2={tk.y} stroke="rgba(31,45,37,.12)" strokeWidth="1" />
+          <text x={padL - 8} y={tk.y + 3} textAnchor="end" className="market-chart-axis">{formatAxis(tk.v, metric)}</text>
+        </g>
+      ))}
+      <path d={areaPath} fill="url(#market-area-grad)" />
+      <path d={linePath} fill="none" stroke="#b3864b" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+      {hovered && hoverIdx !== null && (
+        <g>
+          <line x1={hx} y1={padT} x2={hx} y2={padT + innerH} stroke="#263d32" strokeWidth="1" strokeDasharray="3 3" />
+          <circle cx={hx} cy={hy} r="4" fill="#263d32" stroke="#fbf9f4" strokeWidth="1.5" />
+          <rect x={tipX} y={tipY} width="110" height="38" rx="4" fill="#263d32" />
+          <text x={tipX + 55} y={tipY + 16} textAnchor="middle" className="market-chart-tooltip-val">
+            {metric === 'revenue' ? fmtMoney(hovered.revenue) : metric === 'units' ? `${hovered.units} ${t.marketCups}` : hovered.orders}
+          </text>
+          <text x={tipX + 55} y={tipY + 30} textAnchor="middle" className="market-chart-tooltip-day">{hovered.day}</text>
+        </g>
+      )}
+      {points.map((p, i) => (i % labelStep === 0 || i === points.length - 1 ? (
+        <text key={i} x={xAt(i)} y={height - 8} textAnchor="middle" className="market-chart-label">{p.day.slice(5)}</text>
+      ) : null))}
+      {points.map((_p, i) => (
+        <rect key={i} x={padL + i * slot} y={padT} width={slot} height={innerH} fill="transparent" onMouseEnter={() => setHoverIdx(i)} />
+      ))}
+    </svg>
+  )
+}
+
+function niceCeil(n: number): number {
+  if (n <= 0) return 1
+  const pow = Math.pow(10, Math.floor(Math.log10(n)))
+  const f = n / pow
+  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10
+  return nice * pow
+}
+
+function formatAxis(v: number, metric: string): string {
+  if (metric === 'revenue') return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`
+  return String(Math.round(v))
+}
+
+function buildTimeseriesChart(points: ProductTimeseriesPoint[]): { width: number; height: number; bars: { x: number; y: number; w: number; h: number; label: string }[] } | null {
+  if (points.length === 0) return null
+  const width = 600
+  const height = 170
+  const padX = 18
+  const padTop = 12
+  const labelH = 18
+  const innerW = width - padX * 2
+  const innerH = height - padTop - labelH
+  const max = Math.max(1, ...points.map(p => p.units))
+  const slot = innerW / points.length
+  const barW = Math.max(2, slot * 0.62)
+  const bars = points.map((p, i) => {
+    const h = (p.units / max) * innerH
+    return {
+      x: padX + i * slot + (slot - barW) / 2,
+      y: padTop + (innerH - h),
+      w: barW,
+      h,
+      label: p.day.slice(5),
+    }
+  })
+  return { width, height, bars }
 }
 
 function usePath() {

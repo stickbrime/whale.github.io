@@ -1,4 +1,4 @@
-import type { AuthStatus, Category, Coupon, CreditStatus, Customer, Order, Product } from './types'
+import type { AuthStatus, Category, Coupon, CreditStatus, Customer, MarketOverview, Order, Product, ProductMarketDetail } from './types'
 
 const API = '/api/v1'
 
@@ -85,4 +85,9 @@ export const api = {
 
   // Fetch a single order (used by the payment page to poll payment status).
   getOrder: (id: number) => request<Order>(`/orders/${id}`),
+
+  // Market analytics — read-only storefront sales intel.
+  marketOverview: (range = '7d') => request<MarketOverview>(`/stats/overview?range=${range}`),
+  productMarketDetail: (id: number, recent = 20) =>
+    request<ProductMarketDetail>(`/stats/products/${id}?recent=${recent}`),
 }

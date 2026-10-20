@@ -293,3 +293,86 @@ class CouponClaimResponse(BaseModel):
     description: Optional[str] = None
     discount_percent: Decimal
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Market analytics — sales aggregates computed from order_items × orders.
+# Intentionally read-only and unauthenticated: this is storefront "market"
+# intel (which products are selling), not financial reporting.
+# ---------------------------------------------------------------------------
+
+
+class MarketProductStat(ORMModel):
+    """One row per product in the market overview table."""
+
+    product_id: int
+    product_name: str
+    category_name: Optional[str] = None
+    price: Decimal
+    stock_quantity: int
+    image_url: Optional[str] = None
+    units_sold: int
+    revenue: Decimal
+    order_count: int
+    last_sold_at: Optional[datetime] = None
+
+
+class MarketOverview(ORMModel):
+    """Aggregate KPIs plus the per-product breakdown for /market."""
+
+    total_revenue: Decimal
+    total_units: int
+    total_orders: int
+    paid_orders: int
+    product_count: int
+    products: List[MarketProductStat]
+    timeseries: List["OverviewTimeseriesPoint"]
+
+
+class OverviewTimeseriesPoint(ORMModel):
+    """One bucket of aggregate sales for the overview chart. ``day`` is a
+    display label — an ISO date, an hour like ``14:00``, or a month like
+    ``2026-10`` — depending on the selected time range."""
+
+    day: str
+    units: int
+    revenue: Decimal
+    orders: int
+
+
+class ProductSaleRecord(ORMModel):
+    """A single recent sale of a product, used on the detail page."""
+
+    order_id: int
+    order_date: datetime
+    quantity: int
+    unit_price: Decimal
+    subtotal: Decimal
+    payment_status: str
+    customer_name: Optional[str] = None
+
+
+class ProductTimeseriesPoint(ORMModel):
+    """One day of sales for the 14-day timeseries chart."""
+
+    day: date
+    units: int
+    revenue: Decimal
+
+
+class ProductMarketDetail(ORMModel):
+    """Full per-product market sheet with KPIs, recent sales, and a chart."""
+
+    product_id: int
+    product_name: str
+    category_name: Optional[str] = None
+    price: Decimal
+    stock_quantity: int
+    image_url: Optional[str] = None
+    units_sold: int
+    revenue: Decimal
+    order_count: int
+    last_sold_at: Optional[datetime] = None
+    recent_sales: List[ProductSaleRecord]
+    timeseries: List[ProductTimeseriesPoint]
+    refreshed_at: datetime

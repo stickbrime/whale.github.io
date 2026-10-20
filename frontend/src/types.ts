@@ -100,3 +100,67 @@ export type ClaimedCoupon = {
   discount_percent: number
   claimed_at: string
 }
+
+// --- Market analytics -----------------------------------------------------
+
+export type MarketProductStat = {
+  product_id: number
+  product_name: string
+  category_name: string | null
+  price: string
+  stock_quantity: number
+  image_url: string | null
+  units_sold: number
+  revenue: string
+  order_count: number
+  last_sold_at: string | null
+}
+
+export type OverviewTimeseriesPoint = {
+  day: string
+  units: number
+  revenue: string
+  orders: number
+}
+
+export type MarketOverview = {
+  total_revenue: string
+  total_units: number
+  total_orders: number
+  paid_orders: number
+  product_count: number
+  products: MarketProductStat[]
+  timeseries: OverviewTimeseriesPoint[]
+}
+
+export type ProductSaleRecord = {
+  order_id: number
+  order_date: string
+  quantity: number
+  unit_price: string
+  subtotal: string
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled'
+  customer_name: string | null
+}
+
+export type ProductTimeseriesPoint = {
+  day: string
+  units: number
+  revenue: string
+}
+
+export type ProductMarketDetail = {
+  product_id: number
+  product_name: string
+  category_name: string | null
+  price: string
+  stock_quantity: number
+  image_url: string | null
+  units_sold: number
+  revenue: string
+  order_count: number
+  last_sold_at: string | null
+  recent_sales: ProductSaleRecord[]
+  timeseries: ProductTimeseriesPoint[]
+  refreshed_at: string
+}
