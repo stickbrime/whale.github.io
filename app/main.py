@@ -6,7 +6,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models, schemas
-from app.api import auth, categories, coupons, customers, employees, orders, products, stats
+from app.api import (
+    account,
+    auth,
+    categories,
+    coupons,
+    customers,
+    employees,
+    orders,
+    products,
+    staff,
+    stats,
+    store,
+)
 from app.config import settings
 from app.database import Base, engine
 from app.integrity import prepare_database
@@ -45,6 +57,9 @@ app.include_router(orders.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(stats.router, prefix="/api/v1")
+app.include_router(account.router, prefix="/api/v1")
+app.include_router(staff.router, prefix="/api/v1")
+app.include_router(store.router, prefix="/api/v1")
 
 
 @app.get("/", include_in_schema=False)

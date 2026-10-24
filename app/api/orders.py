@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app import models, schemas
+from app import models, schemas, store_settings
 from app.api.deps import require_admin
 from app.api.common import get_or_404
 from app.config import settings
@@ -108,6 +108,11 @@ def compute_customer_credit(db: Session, customer: models.Customer) -> schemas.C
 @router.post("", response_model=schemas.OrderRead, status_code=status.HTTP_201_CREATED)
 def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
     customer = get_or_404(db, models.Customer, payload.customer_id, "Customer")
+    if customer.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been blocked. Please contact the store.",
+        )
     if payload.employee_id is not None:
         get_or_404(db, models.Employee, payload.employee_id, "Employee")
 
@@ -139,6 +144,14 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
         else:
             merged_items[item.product_id] = item
     payload.items = list(merged_items.values())
+
+    # Staff placing an on-site order (employee_id set) bypass storefront
+    # rules; self-service app orders must respect opening hours and quotas.
+    if payload.employee_id is None:
+        quantities = {item.product_id: item.quantity for item in payload.items}
+        store_settings.enforce_order_rules(
+            db, quantities, scheduled=payload.pickup_time is not None
+        )
 
     product_ids = [item.product_id for item in payload.items]
 
@@ -188,8 +201,48 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             )
         )
     order.total_amount = total.quantize(Decimal("0.01"))
+
+    if order.payment_method == "pay_later":
+        if not store_settings.load_settings(db).allow_pay_later:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Pay later is disabled right now. Please pay at checkout.",
+            )
+        order.payment_status = "pending"
+
+    if order.payment_method == "balance":
+        if Decimal(customer.balance) < order.total_amount:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Insufficient balance: available ¥{customer.balance}, "
+                    f"required ¥{order.total_amount}"
+                ),
+            )
+        # Wallet payments settle instantly and never enter the tab.
+        order.payment_status = "paid"
+
     db.add(order)
     try:
+        db.flush()
+        if order.payment_method == "balance":
+            store_settings.add_balance_entry(
+                db,
+                customer,
+                -order.total_amount,
+                "payment",
+                note=f"Order #{order.order_id}",
+                order_id=order.order_id,
+            )
+        store_settings.record_audit(
+            db,
+            customer.customer_id,
+            "orderCreated",
+            target=f"order:{order.order_id}",
+            detail=f"¥{order.total_amount} via {order.payment_method}",
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -324,6 +377,8 @@ def update_order(order_id: int, payload: schemas.OrderUpdate, db: Session = Depe
 
     if changes.get("payment_status") is not None:
         _transition_status(order, changes["payment_status"].value)
+    if "fulfillment_status" in changes and changes["fulfillment_status"] is not None:
+        order.fulfillment_status = changes["fulfillment_status"]
 
     db.commit()
     db.refresh(order)

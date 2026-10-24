@@ -26,9 +26,37 @@ class Settings:
     printer_encoding: str = os.getenv("PRINTER_ENCODING", "gbk")
     printer_shop_name: str = os.getenv("PRINTER_SHOP_NAME", "咖啡店")
 
+    # Public origin of the frontend, used to build OAuth redirect URIs.
+    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:5173")
+
+    # LinkBAID / Seiue student SSO (school account login).
+    seiue_host: str = os.getenv("ONELOGIN_HOST", "")
+    seiue_client_id: str = os.getenv("ONELOGIN_CLIENT_ID", "")
+    seiue_client_secret: str = os.getenv("ONELOGIN_CLIENT_SECRET", "")
+
+    # Feishu (Lark) open-platform OAuth.
+    feishu_app_id: str = os.getenv("FEISHU_APP_ID", "")
+    feishu_app_secret: str = os.getenv("FEISHU_APP_SECRET", "")
+
+    # WeChat open-platform web login.
+    wechat_app_id: str = os.getenv("WECHAT_APP_ID", "")
+    wechat_app_secret: str = os.getenv("WECHAT_APP_SECRET", "")
+
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def seiue_configured(self) -> bool:
+        return bool(self.seiue_host and self.seiue_client_id and self.seiue_client_secret)
+
+    @property
+    def feishu_configured(self) -> bool:
+        return bool(self.feishu_app_id and self.feishu_app_secret)
+
+    @property
+    def wechat_configured(self) -> bool:
+        return bool(self.wechat_app_id and self.wechat_app_secret)
 
 
 settings = Settings()

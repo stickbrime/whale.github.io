@@ -6,6 +6,8 @@ then correctly refuses to deserialize those values. These startup checks repair 
 rows and triggers prevent the same corruption from being written again.
 """
 
+import sqlite3
+
 from sqlalchemy.engine import Engine
 
 
@@ -14,9 +16,13 @@ def prepare_database(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":
         return
 
+    # SQLite cannot alter CHECK constraints, so the orders table is rebuilt
+    # once when the wallet payment method first becomes available.
+    _ensure_orders_table(engine)
+
     with engine.begin() as connection:
-        _ensure_order_payment_method_column(connection)
         _ensure_product_image_url_column(connection)
+        _ensure_customer_account_columns(connection)
 
         # Preserve recoverable records rather than deleting them. Invalid user-entered
         # dates are replaced with safe defaults; malformed optional times become NULL.
@@ -89,8 +95,20 @@ def prepare_database(engine: Engine) -> None:
             """
             UPDATE orders
             SET payment_method = 'wechat'
-            WHERE payment_method NOT IN ('cash', 'wechat', 'alipay', 'card')
+            WHERE payment_method NOT IN ('cash', 'wechat', 'alipay', 'card', 'balance', 'pay_later')
             """
+        )
+        connection.exec_driver_sql(
+            "UPDATE orders SET fulfillment_status = 'waiting' "
+            "WHERE fulfillment_status NOT IN ('waiting', 'done')"
+        )
+        connection.exec_driver_sql(
+            "UPDATE customers SET balance = 0 "
+            "WHERE balance IS NULL OR typeof(balance) NOT IN ('real', 'integer') OR balance < 0"
+        )
+        connection.exec_driver_sql(
+            "UPDATE customers SET role = 'customer' "
+            "WHERE role IS NULL OR role NOT IN ('customer', 'student', 'staff', 'admin')"
         )
 
         _install_validation_triggers(connection)
@@ -118,7 +136,8 @@ def _install_validation_triggers(connection) -> None:
         NEW.order_date IS NULL OR datetime(NEW.order_date) IS NULL
         OR NEW.pickup_time IS NOT NULL AND time(NEW.pickup_time) IS NULL
         OR NEW.payment_status NOT IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')
-        OR NEW.payment_method NOT IN ('cash', 'wechat', 'alipay', 'card')
+        OR NEW.payment_method NOT IN ('cash', 'wechat', 'alipay', 'card', 'balance', 'pay_later')
+        OR NEW.fulfillment_status NOT IN ('waiting', 'done')
     """
 
     for table, condition, message in (
@@ -128,9 +147,12 @@ def _install_validation_triggers(connection) -> None:
     ):
         for operation in ("INSERT", "UPDATE"):
             trigger_name = f"validate_{table}_{operation.lower()}"
+            # Triggers persist across restarts, so recreate them to pick up
+            # newly allowed values (e.g. the balance payment method).
+            connection.exec_driver_sql(f"DROP TRIGGER IF EXISTS {trigger_name}")
             connection.exec_driver_sql(
                 f"""
-                CREATE TRIGGER IF NOT EXISTS {trigger_name}
+                CREATE TRIGGER {trigger_name}
                 BEFORE {operation} ON {table}
                 WHEN {condition}
                 BEGIN
@@ -140,18 +162,94 @@ def _install_validation_triggers(connection) -> None:
             )
 
 
-def _ensure_order_payment_method_column(connection) -> None:
-    """Add payment_method + pickup_code columns to pre-existing orders table if missing."""
-    rows = connection.exec_driver_sql("PRAGMA table_info(orders)").fetchall()
-    existing = {r[1] for r in rows}
-    if "payment_method" not in existing:
-        connection.exec_driver_sql(
-            "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(20) NOT NULL DEFAULT 'wechat'"
+_ORDER_COLUMN_ADDITIONS = {
+    "payment_method": "VARCHAR(20) NOT NULL DEFAULT 'wechat'",
+    "pickup_code": "VARCHAR(10) NULL",
+    "fulfillment_status": "VARCHAR(20) NOT NULL DEFAULT 'waiting'",
+}
+
+_ORDERS_TABLE_DDL = """
+    CREATE TABLE orders__new (
+        order_id INTEGER NOT NULL PRIMARY KEY,
+        order_date DATETIME NOT NULL,
+        total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        payment_method VARCHAR(20) NOT NULL DEFAULT 'wechat',
+        payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        fulfillment_status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+        pickup_code VARCHAR(10),
+        pickup_time TIME,
+        customer_id INTEGER NOT NULL,
+        employee_id INTEGER,
+        CONSTRAINT ck_order_total_nonnegative CHECK (total_amount >= 0),
+        CONSTRAINT ck_order_payment_method CHECK (
+            payment_method IN ('cash', 'wechat', 'alipay', 'card', 'balance', 'pay_later')
+        ),
+        CONSTRAINT ck_order_payment_status CHECK (
+            payment_status IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')
+        ),
+        CONSTRAINT ck_order_fulfillment_status CHECK (fulfillment_status IN ('waiting', 'done')),
+        FOREIGN KEY(customer_id) REFERENCES customers (customer_id) ON DELETE RESTRICT,
+        FOREIGN KEY(employee_id) REFERENCES employees (employee_id) ON DELETE SET NULL
+    )
+"""
+
+
+def _ensure_orders_table(engine: Engine) -> None:
+    """Add missing order columns and widen the payment-method CHECK constraint.
+
+    Runs on a dedicated sqlite3 connection with foreign keys disabled so the
+    rebuild cannot cascade into ``order_items``.
+    """
+    database = engine.url.database
+    if not database or database == ":memory:":
+        return
+
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        existing = {row[1] for row in connection.execute("PRAGMA table_info(orders)")}
+        if not existing:
+            return
+
+        for column, definition in _ORDER_COLUMN_ADDITIONS.items():
+            if column not in existing:
+                connection.execute(f"ALTER TABLE orders ADD COLUMN {column} {definition}")
+
+        create_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'"
+        ).fetchone()
+        if create_sql and "balance" in (create_sql[0] or ""):
+            connection.commit()
+            return
+
+        connection.execute(_ORDERS_TABLE_DDL)
+        connection.execute(
+            """
+            INSERT INTO orders__new (
+                order_id, order_date, total_amount, payment_method, payment_status,
+                fulfillment_status, pickup_code, pickup_time, customer_id, employee_id
+            )
+            SELECT
+                order_id, order_date, total_amount, payment_method, payment_status,
+                COALESCE(fulfillment_status, 'waiting'), pickup_code, pickup_time,
+                customer_id, employee_id
+            FROM orders
+            """
         )
-    if "pickup_code" not in existing:
-        connection.exec_driver_sql(
-            "ALTER TABLE orders ADD COLUMN pickup_code VARCHAR(10) NULL"
+        connection.execute("DROP TABLE orders")
+        connection.execute("ALTER TABLE orders__new RENAME TO orders")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ix_orders_customer_id ON orders (customer_id)"
         )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ix_orders_employee_id ON orders (employee_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ix_orders_order_id ON orders (order_id)"
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def _ensure_product_image_url_column(connection) -> None:
@@ -160,3 +258,27 @@ def _ensure_product_image_url_column(connection) -> None:
     existing = {r[1] for r in rows}
     if "image_url" not in existing:
         connection.exec_driver_sql("ALTER TABLE products ADD COLUMN image_url TEXT NULL")
+
+
+def _ensure_customer_account_columns(connection) -> None:
+    """Add wallet / staff / OAuth columns to a pre-existing customers table."""
+    rows = connection.exec_driver_sql("PRAGMA table_info(customers)").fetchall()
+    existing = {r[1] for r in rows}
+    additions = {
+        "balance": "ALTER TABLE customers ADD COLUMN balance NUMERIC(10, 2) NOT NULL DEFAULT 0",
+        "role": "ALTER TABLE customers ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'customer'",
+        "permissions": "ALTER TABLE customers ADD COLUMN permissions TEXT NOT NULL DEFAULT ''",
+        "blocked": "ALTER TABLE customers ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0",
+        "auth_provider": (
+            "ALTER TABLE customers ADD COLUMN auth_provider VARCHAR(20) NOT NULL DEFAULT 'email'"
+        ),
+        "seiue_id": "ALTER TABLE customers ADD COLUMN seiue_id INTEGER NULL",
+        "feishu_open_id": "ALTER TABLE customers ADD COLUMN feishu_open_id VARCHAR(100) NULL",
+        "wechat_open_id": "ALTER TABLE customers ADD COLUMN wechat_open_id VARCHAR(100) NULL",
+    }
+    for column, statement in additions.items():
+        if column not in existing:
+            connection.exec_driver_sql(statement)
+
+
+

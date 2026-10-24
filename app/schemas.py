@@ -25,6 +25,8 @@ class PaymentMethod(str, Enum):
     wechat = "wechat"
     alipay = "alipay"
     card = "card"
+    balance = "balance"
+    pay_later = "pay_later"
 
 
 class CustomerBase(BaseModel):
@@ -50,6 +52,40 @@ class CustomerRead(CustomerBase, ORMModel):
     customer_id: int
     loyalty_points: int
     join_date: date
+    balance: Decimal = Decimal("0.00")
+    role: str = "customer"
+    blocked: int = 0
+    auth_provider: str = "email"
+    permissions: List[str] = Field(default_factory=list, validation_alias="permission_list")
+    seiue_id: Optional[int] = None
+
+
+class PhoneLoginRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=30)
+    first_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+
+
+class StudentLoginRequest(BaseModel):
+    """Simulated student SSO callback payload (LinkBAID/Seiue identity)."""
+
+    seiue_id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, min_length=6, max_length=30)
+    pinyin: Optional[str] = Field(default=None, max_length=100)
+
+
+class ProviderStatus(BaseModel):
+    email: bool = True
+    phone: bool = True
+    seiue: bool = False
+    feishu: bool = False
+    wechat: bool = False
+
+
+class AuthProviders(BaseModel):
+    providers: ProviderStatus
+    message: Optional[str] = None
 
 
 class EmployeeBase(BaseModel):
@@ -166,6 +202,7 @@ class OrderRead(ORMModel):
     total_amount: Decimal
     payment_method: PaymentMethod
     payment_status: PaymentStatus
+    fulfillment_status: str = "waiting"
     pickup_code: Optional[str] = None
     pickup_time: Optional[time]
     customer_id: int
@@ -180,6 +217,7 @@ class OrderUpdate(BaseModel):
     employee_id: Optional[int] = Field(default=None, gt=0)
     pickup_time: Optional[time] = None
     payment_status: Optional[PaymentStatus] = None
+    fulfillment_status: Optional[str] = Field(default=None, pattern="^(waiting|done)$")
 
 
 class PaymentRequest(BaseModel):
@@ -376,3 +414,118 @@ class ProductMarketDetail(ORMModel):
     recent_sales: List[ProductSaleRecord]
     timeseries: List[ProductTimeseriesPoint]
     refreshed_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Wallet / balance
+# ---------------------------------------------------------------------------
+
+
+class BalanceTransactionRead(ORMModel):
+    balance_transaction_id: int
+    customer_id: int
+    amount: Decimal
+    kind: str
+    status: str
+    note: Optional[str] = None
+    order_id: Optional[int] = None
+    created_at: datetime
+
+
+class TopUpRequest(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=200)
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
+
+
+class WalletSummary(BaseModel):
+    customer_id: int
+    balance: Decimal
+    max_balance: Decimal
+    recharge_minimum: Decimal
+    transactions: List[BalanceTransactionRead]
+
+
+# ---------------------------------------------------------------------------
+# Store settings edited by volunteers
+# ---------------------------------------------------------------------------
+
+
+class StoreSettingsRead(BaseModel):
+    store_open: bool = True
+    weekdays_only: bool = True
+    open_time: str = "10:00"
+    close_time: str = "15:00"
+    pre_order_start_time: str = "10:00"
+    maximum_cups_per_order: int = 2
+    maximum_cups_per_day: int = 14
+    maximum_pre_order_cups_per_day: int = 0
+    maximum_balance: Decimal = Decimal("500.00")
+    balance_recharge_minimum: Decimal = Decimal("20.00")
+    allow_pay_later: bool = True
+    allow_delivery: bool = True
+    announcement: str = ""
+
+
+class StoreSettingsUpdate(BaseModel):
+    store_open: Optional[bool] = None
+    weekdays_only: Optional[bool] = None
+    open_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    close_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    pre_order_start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    maximum_cups_per_order: Optional[int] = Field(default=None, ge=1, le=100)
+    maximum_cups_per_day: Optional[int] = Field(default=None, ge=0, le=1000)
+    maximum_pre_order_cups_per_day: Optional[int] = Field(default=None, ge=0, le=1000)
+    maximum_balance: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    balance_recharge_minimum: Optional[Decimal] = Field(
+        default=None, ge=0, max_digits=10, decimal_places=2
+    )
+    allow_pay_later: Optional[bool] = None
+    allow_delivery: Optional[bool] = None
+    announcement: Optional[str] = Field(default=None, max_length=500)
+
+
+class StoreStatus(BaseModel):
+    open: bool
+    reason: Optional[str] = None
+    settings: StoreSettingsRead
+
+
+# ---------------------------------------------------------------------------
+# Staff (volunteer) dashboard
+# ---------------------------------------------------------------------------
+
+
+class StaffProfile(BaseModel):
+    customer_id: int
+    name: str
+    email: str
+    role: str
+    permissions: List[str]
+    is_admin: bool
+
+
+class StaffCustomerRead(CustomerRead):
+    order_count: int = 0
+
+
+class StaffUserUpdate(BaseModel):
+    role: Optional[str] = Field(default=None, pattern="^(customer|student|staff|admin)$")
+    permissions: Optional[List[str]] = None
+    blocked: Optional[bool] = None
+    loyalty_points: Optional[int] = Field(default=None, ge=0)
+    balance_delta: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+class AuditLogRead(ORMModel):
+    audit_log_id: int
+    actor_customer_id: Optional[int] = None
+    action: str
+    target: Optional[str] = None
+    detail: Optional[str] = None
+    created_at: datetime

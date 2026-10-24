@@ -21,6 +21,11 @@ export type Customer = {
   phone: string
   loyalty_points: number
   join_date: string
+  balance: string
+  role: 'customer' | 'student' | 'staff' | 'admin'
+  blocked: number
+  auth_provider: string
+  permissions: string[]
   seiue_id?: number | null
 }
 
@@ -38,8 +43,9 @@ export type Order = {
   order_id: number
   order_date: string
   total_amount: string
-  payment_method: 'cash' | 'wechat' | 'alipay' | 'card'
+  payment_method: 'cash' | 'wechat' | 'alipay' | 'card' | 'balance' | 'pay_later'
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled'
+  fulfillment_status: 'waiting' | 'done'
   pickup_code: string | null
   pickup_time: string | null
   customer_id: number
@@ -73,6 +79,78 @@ export type AuthStatus = {
   configured: boolean
   customer: Customer | null
   credit: CreditStatus | null
+}
+
+export type AuthProviders = {
+  providers: {
+    email: boolean
+    phone: boolean
+    seiue: boolean
+    feishu: boolean
+    wechat: boolean
+  }
+  message: string | null
+}
+
+export type BalanceTransaction = {
+  balance_transaction_id: number
+  customer_id: number
+  amount: string
+  kind: 'topup' | 'payment' | 'refund' | 'adjustment'
+  status: string
+  note: string | null
+  order_id: number | null
+  created_at: string
+}
+
+export type WalletSummary = {
+  customer_id: number
+  balance: string
+  max_balance: string
+  recharge_minimum: string
+  transactions: BalanceTransaction[]
+}
+
+export type StoreSettings = {
+  store_open: boolean
+  weekdays_only: boolean
+  open_time: string
+  close_time: string
+  pre_order_start_time: string
+  maximum_cups_per_order: number
+  maximum_cups_per_day: number
+  maximum_pre_order_cups_per_day: number
+  maximum_balance: string
+  balance_recharge_minimum: string
+  allow_pay_later: boolean
+  allow_delivery: boolean
+  announcement: string
+}
+
+export type StoreStatus = {
+  open: boolean
+  reason: string | null
+  settings: StoreSettings
+}
+
+export type StaffProfile = {
+  customer_id: number
+  name: string
+  email: string
+  role: string
+  permissions: string[]
+  is_admin: boolean
+}
+
+export type StaffCustomer = Customer & { order_count: number }
+
+export type AuditLog = {
+  audit_log_id: number
+  actor_customer_id: number | null
+  action: string
+  target: string | null
+  detail: string | null
+  created_at: string
 }
 
 export type Coupon = {

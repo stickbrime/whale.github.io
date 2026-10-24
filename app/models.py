@@ -34,9 +34,39 @@ class Customer(Base):
     loyalty_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     join_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
 
-    orders: Mapped[List["Order"]] = relationship(back_populates="customer", passive_deletes=True)
+    # Account / staff features ported from the original Whale platform.
+    balance: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("0.00"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(20), default="customer", nullable=False)
+    permissions: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    blocked: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    auth_provider: Mapped[str] = mapped_column(
+        String(20), default="email", nullable=False
+    )
+    seiue_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, unique=True, index=True
+    )
+    feishu_open_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, unique=True, index=True
+    )
+    wechat_open_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, unique=True, index=True
+    )
 
-    __table_args__ = (CheckConstraint("loyalty_points >= 0", name="ck_customer_loyalty_nonnegative"),)
+    orders: Mapped[List["Order"]] = relationship(back_populates="customer", passive_deletes=True)
+    balance_transactions: Mapped[List["BalanceTransaction"]] = relationship(
+        back_populates="customer", passive_deletes=True
+    )
+
+    @property
+    def permission_list(self) -> List[str]:
+        return [p for p in (self.permissions or "").split(",") if p]
+
+    __table_args__ = (
+        CheckConstraint("loyalty_points >= 0", name="ck_customer_loyalty_nonnegative"),
+        CheckConstraint("balance >= 0", name="ck_customer_balance_nonnegative"),
+    )
 
 
 class Employee(Base):
@@ -97,6 +127,9 @@ class Order(Base):
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(20), default="wechat", nullable=False)
     payment_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
+    fulfillment_status: Mapped[str] = mapped_column(
+        String(20), default="waiting", nullable=False
+    )
     pickup_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     pickup_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     customer_id: Mapped[int] = mapped_column(
@@ -124,12 +157,16 @@ class Order(Base):
     __table_args__ = (
         CheckConstraint("total_amount >= 0", name="ck_order_total_nonnegative"),
         CheckConstraint(
-            "payment_method IN ('cash', 'wechat', 'alipay', 'card')",
+            "payment_method IN ('cash', 'wechat', 'alipay', 'card', 'balance', 'pay_later')",
             name="ck_order_payment_method",
         ),
         CheckConstraint(
             "payment_status IN ('pending', 'paid', 'failed', 'refunded', 'cancelled')",
             name="ck_order_payment_status",
+        ),
+        CheckConstraint(
+            "fulfillment_status IN ('waiting', 'done')",
+            name="ck_order_fulfillment_status",
         ),
     )
 
@@ -190,4 +227,75 @@ class Coupon(Base):
         CheckConstraint(
             "max_claims IS NULL OR max_claims >= 0", name="ck_coupon_max_claims_nonnegative"
         ),
+    )
+
+
+class BalanceTransaction(Base):
+    """Ledger for every movement of a customer's in-store balance."""
+
+    __tablename__ = "balance_transactions"
+
+    balance_transaction_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, index=True
+    )
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.customer_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # A positive topup credits the wallet; a payment is stored as a negative
+    # amount so ``sum(amount)`` always equals the current balance.
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), default="topup", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    order_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("orders.order_id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False
+    )
+
+    customer: Mapped["Customer"] = relationship(back_populates="balance_transactions")
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('topup', 'payment', 'refund', 'adjustment')",
+            name="ck_balance_kind",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'completed', 'failed', 'cancelled')",
+            name="ck_balance_status",
+        ),
+    )
+
+
+class StoreSetting(Base):
+    """Key/value store for storefront configuration edited by volunteers."""
+
+    __tablename__ = "store_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now, nullable=False
+    )
+
+
+class AuditLog(Base):
+    """General-purpose staff audit trail (orders, users, settings, balance)."""
+
+    __tablename__ = "audit_logs"
+
+    audit_log_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    actor_customer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("customers.customer_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    target: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, nullable=False, index=True
     )

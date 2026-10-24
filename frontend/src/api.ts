@@ -1,4 +1,21 @@
-import type { AuthStatus, Category, Coupon, CreditStatus, Customer, MarketOverview, Order, Product, ProductMarketDetail } from './types'
+import type {
+  AuditLog,
+  AuthProviders,
+  AuthStatus,
+  Category,
+  Coupon,
+  CreditStatus,
+  Customer,
+  MarketOverview,
+  Order,
+  Product,
+  ProductMarketDetail,
+  StaffCustomer,
+  StaffProfile,
+  StoreSettings,
+  StoreStatus,
+  WalletSummary
+} from './types'
 
 const API = '/api/v1'
 
@@ -30,7 +47,55 @@ export const api = {
   creditStatus: (id: number) => request<CreditStatus>(`/orders/customers/${id}/credit-status`),
   manualLogin: (data: { email: string; first_name?: string; last_name?: string }) =>
     request<{ message: string }>('/auth/login/manual', { method: 'POST', body: JSON.stringify(data) }),
+  phoneLogin: (data: { phone: string; first_name?: string; last_name?: string }) =>
+    request<{ message: string }>('/auth/login/phone', { method: 'POST', body: JSON.stringify(data) }),
+  studentLogin: (data: { seiue_id: number; name: string; phone?: string }) =>
+    request<{ message: string }>('/auth/login/student', { method: 'POST', body: JSON.stringify(data) }),
+  authProviders: () => request<AuthProviders>('/auth/providers'),
   authStatus: () => request<AuthStatus>('/auth/me'),
+
+  // Wallet
+  wallet: () => request<WalletSummary>('/account/wallet'),
+  topUp: (amount: string, note?: string) =>
+    request<WalletSummary>('/account/wallet/topup', {
+      method: 'POST',
+      body: JSON.stringify({ amount, note })
+    }),
+
+  // Storefront status
+  storeStatus: () => request<StoreStatus>('/store/status'),
+
+  // Volunteer console
+  staffMe: () => request<StaffProfile>('/staff/me'),
+  staffOrders: (fulfillment?: 'waiting' | 'done') =>
+    request<Order[]>(`/staff/orders${fulfillment ? `?fulfillment_status=${fulfillment}` : ''}`),
+  staffFulfill: (id: number) =>
+    request<Order>(`/staff/orders/${id}/fulfill`, { method: 'POST' }),
+  staffReopen: (id: number) =>
+    request<Order>(`/staff/orders/${id}/reopen`, { method: 'POST' }),
+  staffSettings: () => request<StoreSettings>('/staff/settings'),
+  staffSaveSettings: (data: Partial<StoreSettings>) =>
+    request<StoreSettings>('/staff/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  staffUsers: (search?: string) =>
+    request<StaffCustomer[]>(`/staff/users${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  staffUpdateUser: (
+    id: number,
+    data: {
+      role?: string
+      permissions?: string[]
+      blocked?: boolean
+      loyalty_points?: number
+      balance_delta?: string
+      note?: string
+    }
+  ) => request<StaffCustomer>(`/staff/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  staffLogs: () => request<AuditLog[]>('/staff/logs'),
+  staffProducts: () => request<Product[]>('/staff/products'),
+  staffAdjustStock: (id: number, quantity_change: number) =>
+    request<{ product_id: number; stock_quantity: number }>(`/staff/products/${id}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity_change })
+    }),
   logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
   payOrder: (id: number) => request<Order>(`/orders/${id}/pay`, { method: 'POST' }),
   settleAll: (customerId: number) => request<Order[]>(`/orders/customers/${customerId}/settle-all`, { method: 'POST' }),
@@ -41,7 +106,7 @@ export const api = {
   createOrder: (data: {
     customer_id: number
     pickup_time?: string
-    payment_method: 'cash' | 'wechat' | 'alipay'
+    payment_method: 'cash' | 'wechat' | 'alipay' | 'balance' | 'pay_later'
     payment_status: 'pending' | 'paid'
     credit_days?: number
     items: Array<{ product_id: number; quantity: number; customization?: string }>
