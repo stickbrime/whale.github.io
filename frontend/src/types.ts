@@ -1,3 +1,11 @@
+export type ProductVariant = {
+  variant_id: number
+  name: string
+  price_delta: string
+  stock_quantity: number | null
+  sort_order: number
+}
+
 export type Product = {
   product_id: number
   product_name: string
@@ -6,6 +14,7 @@ export type Product = {
   stock_quantity: number
   image_url: string | null
   category_id: number
+  variants: ProductVariant[]
 }
 
 export type Category = {
@@ -35,6 +44,7 @@ export type OrderItem = {
   unit_price: string
   subtotal: string
   customization: string | null
+  variant_name: string | null
   product_id: number
   product: { product_id: number; product_name: string }
 }
@@ -62,6 +72,8 @@ export type Order = {
 export type CartItem = Product & {
   quantity: number
   customization?: string
+  variant_id?: number
+  variant_name?: string
 }
 
 export type Language = 'en' | 'zh'

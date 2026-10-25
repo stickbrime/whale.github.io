@@ -98,3 +98,63 @@ def delete_product(product_id: int, db: Session = Depends(get_db), _: None = Dep
     db.delete(product)
     commit_or_conflict(db, "Products referenced by order history cannot be deleted")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Size / type variants -------------------------------------------------
+
+
+@router.post(
+    "/{product_id}/variants",
+    response_model=schemas.ProductVariantRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_variant(
+    product_id: int,
+    payload: schemas.ProductVariantCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    get_or_404(db, models.Product, product_id, "Product")
+    variant = models.ProductVariant(product_id=product_id, **payload.model_dump())
+    db.add(variant)
+    commit_or_conflict(db, "This product already has a variant with that name")
+    db.refresh(variant)
+    return variant
+
+
+@router.patch(
+    "/{product_id}/variants/{variant_id}",
+    response_model=schemas.ProductVariantRead,
+)
+def update_variant(
+    product_id: int,
+    variant_id: int,
+    payload: schemas.ProductVariantUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    variant = get_or_404(db, models.ProductVariant, variant_id, "Variant")
+    if variant.product_id != product_id:
+        raise HTTPException(status_code=404, detail="Variant not found for this product")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(variant, field, value)
+    commit_or_conflict(db, "This product already has a variant with that name")
+    db.refresh(variant)
+    return variant
+
+
+@router.delete(
+    "/{product_id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_variant(
+    product_id: int,
+    variant_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+) -> Response:
+    variant = get_or_404(db, models.ProductVariant, variant_id, "Variant")
+    if variant.product_id != product_id:
+        raise HTTPException(status_code=404, detail="Variant not found for this product")
+    db.delete(variant)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

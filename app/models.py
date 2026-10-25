@@ -110,10 +110,40 @@ class Product(Base):
     order_items: Mapped[List["OrderItem"]] = relationship(
         back_populates="product", passive_deletes=True
     )
+    variants: Mapped[List["ProductVariant"]] = relationship(
+        back_populates="product",
+        order_by="ProductVariant.sort_order",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         CheckConstraint("price >= 0", name="ck_product_price_nonnegative"),
         CheckConstraint("stock_quantity >= 0", name="ck_product_stock_nonnegative"),
+    )
+
+
+class ProductVariant(Base):
+    """A size / type option for a product, e.g. Regular and Large."""
+
+    __tablename__ = "product_variants"
+
+    variant_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    price_delta: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("0.00"), nullable=False
+    )
+    # NULL means the variant shares the product's stock pool.
+    stock_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="variants")
+
+    __table_args__ = (
+        UniqueConstraint("product_id", "name", name="uq_variant_product_name"),
+        CheckConstraint("stock_quantity IS NULL OR stock_quantity >= 0", name="ck_variant_stock_nonnegative"),
     )
 
 
@@ -179,6 +209,9 @@ class OrderItem(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     customization: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Snapshot of the chosen size/type so history survives variant edits.
+    variant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    variant_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     order_id: Mapped[int] = mapped_column(
         ForeignKey("orders.order_id", ondelete="CASCADE"), nullable=False, index=True
     )

@@ -155,8 +155,31 @@ class ProductUpdate(BaseModel):
     category_id: Optional[int] = Field(default=None, gt=0)
 
 
+class ProductVariantCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    price_delta: Decimal = Field(default=Decimal("0.00"), max_digits=10, decimal_places=2)
+    stock_quantity: Optional[int] = Field(default=None, ge=0)
+    sort_order: int = 0
+
+
+class ProductVariantUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    price_delta: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
+    stock_quantity: Optional[int] = Field(default=None, ge=0)
+    sort_order: Optional[int] = None
+
+
+class ProductVariantRead(ORMModel):
+    variant_id: int
+    name: str
+    price_delta: Decimal
+    stock_quantity: Optional[int]
+    sort_order: int
+
+
 class ProductRead(ProductBase, ORMModel):
     product_id: int
+    variants: List[ProductVariantRead] = Field(default_factory=list)
 
 
 class ProductSummary(ORMModel):
@@ -168,6 +191,7 @@ class OrderItemCreate(BaseModel):
     product_id: int = Field(gt=0)
     quantity: int = Field(gt=0, le=100)
     customization: Optional[str] = Field(default=None, max_length=1000)
+    variant_id: Optional[int] = Field(default=None, gt=0)
 
 
 class OrderCreate(BaseModel):
@@ -192,6 +216,7 @@ class OrderItemRead(ORMModel):
     unit_price: Decimal
     subtotal: Decimal
     customization: Optional[str]
+    variant_name: Optional[str] = None
     product_id: int
     product: ProductSummary
 

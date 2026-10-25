@@ -14,9 +14,11 @@ import hashlib
 import secrets
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -257,6 +259,121 @@ def oauth_start(provider: str, request: Request):
     return redirect
 
 
+def _pick(payload: dict, *keys):
+    """Return the first non-empty value for any of the given JSON keys."""
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _unwrap(payload: dict) -> dict:
+    """Some provider endpoints wrap the real payload in a ``data`` object."""
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
+
+
+def _seiue_sign_in(code: Optional[str], db: Session) -> Response:
+    """Exchange the authorization code, then create/sign in the student."""
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Seiue sign-in was cancelled or returned no code.",
+        )
+
+    host = settings.seiue_host.rstrip("/")
+    redirect_uri = f"{settings.public_base_url}/api/v1/auth/oauth/seiue/callback"
+
+    try:
+        token_response = httpx.post(
+            f"{host}{settings.seiue_token_path}",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": settings.seiue_client_id,
+                "client_secret": settings.seiue_client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            timeout=15,
+        )
+        token_response.raise_for_status()
+        token_data = _unwrap(token_response.json())
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Seiue rejected the sign-in code. Please try again.",
+        )
+
+    access_token = _pick(token_data, "access_token", "token")
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Seiue did not return an access token.",
+        )
+
+    try:
+        info_response = httpx.get(
+            f"{host}{settings.seiue_userinfo_path}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+        info_response.raise_for_status()
+        info = _unwrap(info_response.json())
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not read your Seiue profile. Please try again.",
+        )
+
+    raw_id = _pick(info, "id", "user_id", "seiue_id", "student_id")
+    try:
+        seiue_id = int(raw_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Seiue did not return a numeric student id.",
+        )
+
+    customer = db.scalar(
+        select(models.Customer).where(models.Customer.seiue_id == seiue_id)
+    )
+    if customer is None:
+        name = str(_pick(info, "name", "realname", "real_name", "nickname", "display_name") or "")
+        first_name, last_name = _split_name(name or f"Student {seiue_id}")
+        customer = models.Customer(
+            first_name=first_name,
+            last_name=last_name,
+            email=f"seiue-{seiue_id}@student.whalecafe.com",
+            phone=str(_pick(info, "phone", "mobile") or f"seiue-{seiue_id}"),
+            auth_provider="seiue",
+            seiue_id=seiue_id,
+            role="student",
+        )
+        db.add(customer)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            customer = db.scalar(
+                select(models.Customer).where(models.Customer.seiue_id == seiue_id)
+            )
+            if customer is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This Seiue account conflicts with an existing profile.",
+                )
+        else:
+            db.refresh(customer)
+
+    _ensure_login_allowed(customer)
+
+    redirect = RedirectResponse(f"{settings.public_base_url}/account")
+    _set_customer_cookie(redirect, customer.customer_id)
+    redirect.delete_cookie(_STATE_COOKIE, path="/")
+    return redirect
+
+
 @router.get("/oauth/{provider}/callback")
 def oauth_callback(
     provider: str,
@@ -268,8 +385,8 @@ def oauth_callback(
 ):
     """Handle the provider callback.
 
-    Token exchange requires live provider credentials, so this returns a
-    clear 501 until they are supplied rather than pretending to succeed.
+    Seiue completes the full token exchange; the other providers still return
+    a clear 501 until their credentials and API details are supplied.
     """
     if provider not in _OAUTH_START_URLS:
         raise HTTPException(status_code=404, detail="Unknown sign-in provider")
@@ -278,6 +395,17 @@ def oauth_callback(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=f"{provider} sign-in is not configured yet.",
         )
+
+    cookie_state = request.cookies.get(_STATE_COOKIE)
+    if not state or not cookie_state or not secrets.compare_digest(state, cookie_state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The sign-in session expired. Please start again.",
+        )
+
+    if provider == "seiue":
+        return _seiue_sign_in(code, db)
+
     return JSONResponse(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         content={

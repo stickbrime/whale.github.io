@@ -37,7 +37,7 @@ import { api } from './api'
 import { copy } from './i18n'
 import { LoginPage } from './LoginPage'
 import { StaffPage } from './StaffPage'
-import type { AuthStatus, BalanceTransaction, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, MarketOverview, MarketProductStat, Order, OverviewTimeseriesPoint, Product, ProductMarketDetail, ProductSaleRecord, ProductTimeseriesPoint, StoreStatus, WalletSummary } from './types'
+import type { AuthStatus, BalanceTransaction, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, MarketOverview, MarketProductStat, Order, OverviewTimeseriesPoint, Product, ProductMarketDetail, ProductSaleRecord, ProductTimeseriesPoint, ProductVariant, StoreStatus, WalletSummary } from './types'
 
 const productArt: Record<string, string> = {
   Espresso: 'https://images.unsplash.com/photo-1510707577719-ae7c14805e3a?auto=format&fit=crop&w=900&q=82',
@@ -146,14 +146,24 @@ function App() {
   }, [couponPopupSeen])
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, variant?: ProductVariant | null) => {
+    const variantId = variant?.variant_id
+    const stock = variant?.stock_quantity ?? product.stock_quantity
+    const price = variant ? Number(product.price) + Number(variant.price_delta) : Number(product.price)
     setCart(current => {
-      const found = current.find(item => item.product_id === product.product_id)
+      const found = current.find(item => item.product_id === product.product_id && item.variant_id === variantId)
       return found
-        ? current.map(item => item.product_id === product.product_id
-          ? { ...item, quantity: Math.min(item.quantity + 1, item.stock_quantity) }
+        ? current.map(item => item.product_id === product.product_id && item.variant_id === variantId
+          ? { ...item, quantity: Math.min(item.quantity + 1, stock) }
           : item)
-        : [...current, { ...product, quantity: 1 }]
+        : [...current, {
+            ...product,
+            price: price.toFixed(2),
+            stock_quantity: stock,
+            quantity: 1,
+            variant_id: variantId,
+            variant_name: variant?.name
+          }]
     })
     setToast(t.cartUpdated)
     window.setTimeout(() => setToast(''), 1800)
@@ -371,18 +381,16 @@ function OrderPage({ t, addToCart, locked, cart, coupon, onOpenCoupon }: { t: an
           {loading ? <LoadingBlock /> : error ? <ErrorBlock text={error || t.apiOffline} retry={loadMenu} t={t} /> : (
             <div className="product-grid home-preview-grid">
               {featured.map((product, index) => (
-                <article className="product-card" key={product.product_id} style={{ '--delay': `${index * 55}ms` } as React.CSSProperties}>
-                  <div className="product-image-wrap">
-                    <img src={product.image_url ?? productArt[product.product_name] ?? fallbackArt} alt={product.product_name} className="product-image" />
-                    <span className={availableStock(product, cart) > 0 ? 'stock-pill' : 'stock-pill sold-out'}>{availableStock(product, cart) > 0 ? `${availableStock(product, cart)} ${t.left}` : t.soldOut}</span>
-                    <button className="heart-button" aria-label="Add to favorites"><Heart size={18} /></button>
-                  </div>
-                  <div className="product-info">
-                    <div><span className="product-kind">{categoryName(categories.find(c => c.category_id === product.category_id)?.category_name ?? 'Coffee', t)}</span><h3>{product.product_name}</h3></div>
-                    <p>{product.description}</p>
-                    <div className="product-bottom"><strong>${Number(product.price).toFixed(2)}</strong><button disabled={availableStock(product, cart) === 0 || locked} onClick={() => addToCart(product)}>{availableStock(product, cart) === 0 ? t.soldOut : <><Plus size={16} /> {t.add}</>}</button></div>
-                  </div>
-                </article>
+                <HomeProductCard
+                  key={product.product_id}
+                  product={product}
+                  index={index}
+                  t={t}
+                  cart={cart}
+                  locked={locked}
+                  addToCart={addToCart}
+                  categoryLabel={categoryName(categories.find(c => c.category_id === product.category_id)?.category_name ?? 'Coffee', t)}
+                />
               ))}
             </div>
           )}
@@ -395,7 +403,7 @@ function OrderPage({ t, addToCart, locked, cart, coupon, onOpenCoupon }: { t: an
   )
 }
 
-function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: any; addToCart: (product: Product) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onRemoveCoupon: () => void }) {
+function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: any; addToCart: (product: Product, variant?: ProductVariant | null) => void; locked: boolean; cart: CartItem[]; coupon: ClaimedCoupon | null; onRemoveCoupon: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [category, setCategory] = useState<number | 'all'>('all')
@@ -427,37 +435,40 @@ function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: a
     {locked && <LockBanner t={t} />}
     <div className="shop-toolbar"><label className="search-box"><Search /><input value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search} /></label><div className="filter-tabs shop-tabs"><button className={category === 'all' ? 'active' : ''} onClick={() => setCategory('all')}>{t.all}</button>{categories.map(group => <button className={category === group.category_id ? 'active' : ''} onClick={() => setCategory(group.category_id)} key={group.category_id}>{categoryName(group.category_name, t)}</button>)}</div><label className="sort-control"><span>{t.sortBy}</span><select value={sort} onChange={e => setSort(e.target.value)}><option value="featured">{t.featured}</option><option value="priceLow">{t.priceLow}</option><option value="priceHigh">{t.priceHigh}</option><option value="nameAZ">{t.nameAZ}</option><option value="stockHigh">{t.stockHigh}</option></select></label></div>
     <div className="shop-meta"><span>{t.showing} <strong>{listed.length}</strong> / {products.length}</span>{cartCount > 0 && <Link to="/cart"><ShoppingBag />{cartCount} {t.inYourCart}<ArrowRight /></Link>}</div>
-    {loading ? <LoadingBlock text={t.brewing} /> : <div className="catalog-grid">{listed.map((item, index) => {
-      const available = availableStock(item, cart)
-      const reserved = cart.find(cartItem => cartItem.product_id === item.product_id)?.quantity ?? 0
-      const soldOut = available === 0
-      const original = Number(item.price)
-      const finalPrice = discountPercent > 0 ? discountedPrice(original, discountPercent) : original
-      return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} key={item.product_id} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
-        <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}</span></div>
-        <div className="catalog-copy"><div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>${original.toFixed(2)}</span>}<strong>${finalPrice.toFixed(2)}</strong></div></div><p>{item.description}</p><div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div><button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${finalPrice.toFixed(2)}</>}</button></div>
-      </article>
-    })}</div>}
+    {loading ? <LoadingBlock text={t.brewing} /> : <div className="catalog-grid">{listed.map((item, index) => (
+      <CatalogCard
+        key={item.product_id}
+        item={item}
+        index={index}
+        t={t}
+        cart={cart}
+        locked={locked}
+        addToCart={addToCart}
+        discountPercent={discountPercent}
+        categoryLabel={categoryName(categories.find(c => c.category_id === item.category_id)?.category_name ?? '', t)}
+      />
+    ))}</div>}
     {!loading && listed.length === 0 && <div className="empty-state compact"><Search /><h3>{t.noMatches}</h3><p>{t.noMatchesSub}</p></div>}
   </div></section>
 }
 
 function CartPage({ t, cart, setCart }: { t: any; cart: CartItem[]; setCart: (value: CartItem[] | ((current: CartItem[]) => CartItem[])) => void }) {
   const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
-  const updateQuantity = (id: number, delta: number) => setCart(current => current.map(item => item.product_id === id ? { ...item, quantity: Math.max(0, Math.min(item.stock_quantity, item.quantity + delta)) } : item).filter(item => item.quantity > 0))
-  const customize = (id: number, value: string) => setCart(current => current.map(item => item.product_id === id ? { ...item, customization: value } : item))
+  const updateQuantity = (id: number, variantId: number | undefined, delta: number) => setCart(current => current.map(item => item.product_id === id && item.variant_id === variantId ? { ...item, quantity: Math.max(0, Math.min(item.stock_quantity, item.quantity + delta)) } : item).filter(item => item.quantity > 0))
+  const customize = (id: number, variantId: number | undefined, value: string) => setCart(current => current.map(item => item.product_id === id && item.variant_id === variantId ? { ...item, customization: value } : item))
+  const removeLine = (id: number, variantId: number | undefined) => setCart(current => current.filter(x => !(x.product_id === id && x.variant_id === variantId)))
 
   return <section className="page-section"><div className="container narrow-page">
     <div className="cart-title-row"><PageTitle eyebrow="YOUR SELECTION" title={t.yourCart} subtitle={t.cartSub} />{cart.length > 0 && <button className="clear-cart" onClick={() => { if (window.confirm(t.clearCartConfirm)) setCart([]) }}><Trash2 />{t.clearCart}</button>}</div>
     {cart.length === 0 ? <div className="empty-state"><div className="empty-icon"><ShoppingBag /></div><h2>{t.emptyCart}</h2><p>{t.emptyCartSub}</p><Link className="button button-dark" to="/">{t.browse}<ArrowRight size={17} /></Link></div> : (
       <div className="cart-layout">
         <div className="cart-list">
-          {cart.map(item => <article className="cart-item" key={item.product_id}>
+          {cart.map(item => <article className="cart-item" key={lineKey(item)}>
             <img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" />
-            <div className="cart-item-main"><div className="cart-item-title"><div><span>{t.coffee}</span><h3>{item.product_name}</h3></div><strong>${(Number(item.price) * item.quantity).toFixed(2)}</strong></div>
-              <p>${Number(item.price).toFixed(2)} {t.each}</p>
-              <input className="customization-input" placeholder={`${t.customization} (${t.optional})`} value={item.customization ?? ''} onChange={e => customize(item.product_id, e.target.value)} />
-              <div className="cart-item-actions"><div className="stepper"><button onClick={() => updateQuantity(item.product_id, -1)}><Minus size={15} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.product_id, 1)}><Plus size={15} /></button></div><button className="text-button danger" onClick={() => setCart(current => current.filter(x => x.product_id !== item.product_id))}><Trash2 size={15} />{t.remove}</button></div>
+            <div className="cart-item-main"><div className="cart-item-title"><div><span>{item.variant_name ?? t.coffee}</span><h3>{item.product_name}</h3></div><strong>${(Number(item.price) * item.quantity).toFixed(2)}</strong></div>
+              <p>${Number(item.price).toFixed(2)} {t.each}{item.variant_name && <> · {item.variant_name}</>}</p>
+              <input className="customization-input" placeholder={`${t.customization} (${t.optional})`} value={item.customization ?? ''} onChange={e => customize(item.product_id, item.variant_id, e.target.value)} />
+              <div className="cart-item-actions"><div className="stepper"><button onClick={() => updateQuantity(item.product_id, item.variant_id, -1)}><Minus size={15} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.product_id, item.variant_id, 1)}><Plus size={15} /></button></div><button className="text-button danger" onClick={() => removeLine(item.product_id, item.variant_id)}><Trash2 size={15} />{t.remove}</button></div>
             </div>
           </article>)}
         </div>
@@ -511,15 +522,16 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
 
   const createOrder = async (id: number, method: BackendPayMethod) => {
     const tabNote = payment === 'pending' ? `[Tab: ${creditDays} days]` : ''
-    // Merge duplicate product_ids — the backend rejects orders with dupes.
-    const merged: Record<number, { product_id: number; quantity: number; customization: string | undefined }> = {}
+    // Merge identical product+variant lines — the backend rejects duplicate lines.
+    const merged: Record<string, { product_id: number; variant_id?: number; quantity: number; customization: string | undefined }> = {}
     for (const item of cart) {
+      const key = lineKey(item)
       const note = [item.customization, tabNote].filter(Boolean).join(' · ') || undefined
-      if (merged[item.product_id]) {
-        merged[item.product_id].quantity += item.quantity
-        if (note) merged[item.product_id].customization = [merged[item.product_id].customization, note].filter(Boolean).join(' · ') || undefined
+      if (merged[key]) {
+        merged[key].quantity += item.quantity
+        if (note) merged[key].customization = [merged[key].customization, note].filter(Boolean).join(' · ') || undefined
       } else {
-        merged[item.product_id] = { product_id: item.product_id, quantity: item.quantity, customization: note }
+        merged[key] = { product_id: item.product_id, variant_id: item.variant_id, quantity: item.quantity, customization: note }
       }
     }
     const order = await api.createOrder({
@@ -572,14 +584,15 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
         // the dedicated /pay page, which shows the QR and polls until the
         // backend reports the order paid.
         const couponNote = claimedCoupon ? `[Coupon: ${claimedCoupon.code} -${Number(claimedCoupon.discount_percent)}%]` : ''
-        const merged: Record<number, { product_id: number; quantity: number; customization: string | undefined }> = {}
+        const merged: Record<string, { product_id: number; variant_id?: number; quantity: number; customization: string | undefined }> = {}
         for (const item of cart) {
+          const key = lineKey(item)
           const note = [item.customization, couponNote].filter(Boolean).join(' · ') || undefined
-          if (merged[item.product_id]) {
-            merged[item.product_id].quantity += item.quantity
-            if (note) merged[item.product_id].customization = [merged[item.product_id].customization, note].filter(Boolean).join(' · ') || undefined
+          if (merged[key]) {
+            merged[key].quantity += item.quantity
+            if (note) merged[key].customization = [merged[key].customization, note].filter(Boolean).join(' · ') || undefined
           } else {
-            merged[item.product_id] = { product_id: item.product_id, quantity: item.quantity, customization: note }
+            merged[key] = { product_id: item.product_id, variant_id: item.variant_id, quantity: item.quantity, customization: note }
           }
         }
         const order = await api.createOrder({
@@ -615,7 +628,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
           {payment === 'pending' && <div className="credit-terms"><div><strong>{t.tabLength}</strong><span>{creditDays} {t.days}</span></div><input type="range" min="1" max="14" step="1" value={creditDays} onChange={e => setCreditDays(Number(e.target.value))} /><div className="range-labels"><span>1 {t.days}</span><span>7 {t.days}</span><span>14 {t.days}</span></div><small>{t.maxTwoWeeks}</small><p><ShieldCheck size={15} /> {t.dueOn} {new Date(Date.now() + creditDays * 86400000).toLocaleDateString()}.</p></div>}
         </section>
       </div>
-      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={item.product_id}><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}</strong><small>{item.quantity} × ${Number(item.price).toFixed(2)}</small></div><span>${(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}{claimedCoupon && <div className="summary-coupon"><div className="summary-coupon-line"><Tag size={14} /><span><strong>{claimedCoupon.code}</strong> · {Number(claimedCoupon.discount_percent)}% {t.couponBannerOff}</span></div><div className="summary-line"><span>{t.subtotal}</span><span>${subtotal.toFixed(2)}</span></div><div className="summary-line discount"><span>{t.couponBannerTitle}</span><span>−${(subtotal - total).toFixed(2)}</span></div></div>}<div className="summary-total"><span>{t.total}</span><strong>${total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
+      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={lineKey(item)}><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}{item.variant_name && <span className="cart-variant">{item.variant_name}</span>}</strong><small>{item.quantity} × ${Number(item.price).toFixed(2)}</small></div><span>${(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}{claimedCoupon && <div className="summary-coupon"><div className="summary-coupon-line"><Tag size={14} /><span><strong>{claimedCoupon.code}</strong> · {Number(claimedCoupon.discount_percent)}% {t.couponBannerOff}</span></div><div className="summary-line"><span>{t.subtotal}</span><span>${subtotal.toFixed(2)}</span></div><div className="summary-line discount"><span>{t.couponBannerTitle}</span><span>−${(subtotal - total).toFixed(2)}</span></div></div>}<div className="summary-total"><span>{t.total}</span><strong>${total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
     </form>
     <PaymentModal open={showPayment} onClose={() => setShowPayment(false)} onSuccess={handlePaid} amount={total} t={t} />
   </div></section>
@@ -798,6 +811,7 @@ function AdminPage({ t }: { t: any }) {
   const [orderBusy, setOrderBusy] = useState<number | null>(null)
   const [productBusy, setProductBusy] = useState<number | null>(null)
   const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '', image_url: '' })
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [creating, setCreating] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
 
@@ -1044,27 +1058,35 @@ function AdminPage({ t }: { t: any }) {
                     <th>ID</th>
                     <th>{t.adminProductName ?? 'Name'}</th>
                     <th>{t.adminProductCategory ?? 'Category'}</th>
+                    <th>{t.adminSizes ?? 'Sizes'}</th>
                     <th>{t.adminProductPrice ?? 'Price'}</th>
                     <th>{t.adminProductStock ?? 'Stock'}</th>
                     <th>{t.adminOrderActions ?? 'Actions'}</th>
                   </tr>
                 </thead>
-                <tbody>
                   {products.map(p => {
                     const catName = categories.find(c => c.category_id === p.category_id)?.category_name ?? `#${p.category_id}`
                     return (
-                      <tr key={p.product_id} className={p.stock_quantity < 10 ? 'row-low-stock' : ''}>
+                      <tbody key={p.product_id}>
+                      <tr className={p.stock_quantity < 10 ? 'row-low-stock' : ''}>
                         <td>#{p.product_id}</td>
                         <td className="product-cell">
                           {p.image_url && <img className="admin-product-thumb" src={p.image_url} alt="" />}
                           <div><strong>{p.product_name}</strong>{p.description && <small>{p.description}</small>}</div>
                         </td>
                         <td>{catName}</td>
+                        <td className="admin-sizes">
+                          {p.variants.length > 0
+                            ? p.variants.map(v => <span className="admin-size-chip" key={v.variant_id}>{v.name}{Number(v.price_delta) !== 0 && <small>{Number(v.price_delta) > 0 ? '+' : '−'}${Math.abs(Number(v.price_delta)).toFixed(2)}</small>}</span>)
+                            : <small className="admin-no-sizes">{t.adminNoSizes ?? 'None'}</small>}
+                          <button className="admin-sizes-edit" onClick={() => setEditingProduct(editingProduct?.product_id === p.product_id ? null : p)}>{t.adminEditSizes ?? 'Edit sizes'}</button>
+                        </td>
                         <td className="num"><strong>${Number(p.price).toFixed(2)}</strong></td>
                         <td className="num">
                           <span className={p.stock_quantity === 0 ? 'badge-out' : p.stock_quantity < 10 ? 'badge-low' : 'badge-ok'}>{p.stock_quantity}</span>
                         </td>
                         <td>
+                          <button className="button button-ghost button-mini" onClick={() => setEditingProduct(editingProduct?.product_id === p.product_id ? null : p)}><Settings size={14} />{t.adminEditProduct ?? 'Edit'}</button>
                           <button className="button button-ghost button-mini" disabled={productBusy === p.product_id} onClick={() => handleAdjustStock(p.product_id, -1)}><Minus size={14} /></button>
                           <button className="button button-ghost button-mini" disabled={productBusy === p.product_id} onClick={() => handleAdjustStock(p.product_id, 1)}><Plus size={14} /></button>
                           <button className="button button-danger button-mini" disabled={productBusy === p.product_id} onClick={() => handleDeleteProduct(p.product_id)}>
@@ -1072,9 +1094,14 @@ function AdminPage({ t }: { t: any }) {
                           </button>
                         </td>
                       </tr>
+                      {editingProduct?.product_id === p.product_id && (
+                        <tr className="admin-editor-row"><td colSpan={7}>
+                          <ProductEditor product={p} categories={categories} t={t} onClose={() => setEditingProduct(null)} onSaved={refreshProducts} />
+                        </td></tr>
+                      )}
+                      </tbody>
                     )
                   })}
-                </tbody>
               </table>
             </div>
           </section>
@@ -1084,6 +1111,151 @@ function AdminPage({ t }: { t: any }) {
       </div>
     </div>
   )
+}
+
+function ProductEditor({ product, categories, t, onClose, onSaved }: {
+  product: Product; categories: Category[]; t: any; onClose: () => void; onSaved: () => void
+}) {
+  const [form, setForm] = useState({
+    product_name: product.product_name,
+    description: product.description ?? '',
+    price: product.price,
+    stock_quantity: String(product.stock_quantity),
+    category_id: String(product.category_id),
+    image_url: product.image_url ?? ''
+  })
+  const [variants, setVariants] = useState<ProductVariant[]>(product.variants ?? [])
+  const [draft, setDraft] = useState({ name: '', price_delta: '0.00', stock_quantity: '' })
+  const [saving, setSaving] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleImage = async (event: FormEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    setProcessingImage(true)
+    try {
+      const dataUrl = await readImageAsDataUrl(file)
+      setForm(current => ({ ...current, image_url: dataUrl }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally { setProcessingImage(false) }
+  }
+
+  const saveProduct = async (event: FormEvent) => {
+    event.preventDefault()
+    setSaving(true); setError('')
+    try {
+      await api.updateProduct(product.product_id, {
+        product_name: form.product_name,
+        description: form.description || null,
+        price: form.price,
+        stock_quantity: Number(form.stock_quantity) || 0,
+        image_url: form.image_url || null,
+        category_id: Number(form.category_id)
+      })
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally { setSaving(false) }
+  }
+
+  const patchVariant = (variantId: number, patch: Partial<ProductVariant>) =>
+    setVariants(current => current.map(v => v.variant_id === variantId ? { ...v, ...patch } : v))
+
+  const addVariant = async () => {
+    if (!draft.name.trim()) return
+    setSaving(true); setError('')
+    try {
+      const created = await api.createVariant(product.product_id, {
+        name: draft.name.trim(),
+        price_delta: draft.price_delta || '0.00',
+        stock_quantity: draft.stock_quantity === '' ? null : Number(draft.stock_quantity),
+        sort_order: variants.length
+      })
+      setVariants(current => [...current, created])
+      setDraft({ name: '', price_delta: '0.00', stock_quantity: '' })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally { setSaving(false) }
+  }
+
+  const saveVariant = async (variant: ProductVariant) => {
+    setSaving(true); setError('')
+    try {
+      const updated = await api.updateVariant(product.product_id, variant.variant_id, {
+        name: variant.name,
+        price_delta: variant.price_delta,
+        stock_quantity: variant.stock_quantity,
+        sort_order: variant.sort_order
+      })
+      setVariants(current => current.map(v => v.variant_id === updated.variant_id ? updated : v))
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally { setSaving(false) }
+  }
+
+  const removeVariant = async (variantId: number) => {
+    if (!window.confirm(t.adminDeleteVariantConfirm ?? 'Delete this option?')) return
+    setSaving(true); setError('')
+    try {
+      await api.deleteVariant(product.product_id, variantId)
+      setVariants(current => current.filter(v => v.variant_id !== variantId))
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
+    } finally { setSaving(false) }
+  }
+
+  return <div className="product-editor">
+    <form className="admin-form product-editor-form" onSubmit={saveProduct}>
+      <div className="product-editor-head">
+        <h3>{t.adminEditProduct ?? 'Edit'} · {product.product_name}</h3>
+        <button type="button" className="text-button" onClick={onClose}><X size={14} />{t.adminCancel ?? 'Cancel'}</button>
+      </div>
+      <div className="admin-form-row">
+        <input value={form.product_name} onChange={e => setForm({ ...form, product_name: e.target.value })} placeholder={t.adminProductName ?? 'Name'} required />
+        <input type="number" step="0.01" min="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder={t.adminProductPrice ?? 'Price'} required />
+        <input type="number" min="0" value={form.stock_quantity} onChange={e => setForm({ ...form, stock_quantity: e.target.value })} placeholder={t.adminProductStock ?? 'Stock'} />
+        <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} required>
+          {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+        </select>
+      </div>
+      <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder={t.adminProductDesc ?? 'Description'} />
+      <div className="product-editor-image">
+        <img src={form.image_url || fallbackArt} alt="" />
+        <div className="admin-image-actions">
+          <label className="text-button"><ImagePlus size={14} />{t.adminChangeImage}<input type="file" accept="image/*" hidden onChange={handleImage} disabled={processingImage} /></label>
+          {form.image_url && <button type="button" className="text-button danger" onClick={() => setForm({ ...form, image_url: '' })}><Trash2 size={14} />{t.adminRemoveImage}</button>}
+          {processingImage && <span className="admin-image-hint">{t.adminImageProcessing}</span>}
+        </div>
+      </div>
+      {error && <div className="inline-error">{error}</div>}
+      <button className="button button-dark" type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <><Check size={16} />{t.adminSaveProduct ?? 'Save changes'}</>}</button>
+    </form>
+
+    <div className="admin-form variant-editor">
+      <h3>{t.adminVariants ?? 'Sizes / options'}</h3>
+      <small className="admin-image-hint">{t.adminVariantHint ?? 'Leave stock blank to share the product stock. Price adjust is added to the base price.'}</small>
+      {variants.map(variant => <div className="variant-editor-row" key={variant.variant_id}>
+        <input value={variant.name} onChange={e => patchVariant(variant.variant_id, { name: e.target.value })} placeholder={t.adminVariantName ?? 'Option'} />
+        <input type="number" step="0.01" value={variant.price_delta} onChange={e => patchVariant(variant.variant_id, { price_delta: e.target.value })} placeholder={t.adminVariantDelta ?? 'Price ±'} />
+        <input type="number" min="0" value={variant.stock_quantity ?? ''} onChange={e => patchVariant(variant.variant_id, { stock_quantity: e.target.value === '' ? null : Number(e.target.value) })} placeholder={t.adminVariantInherit ?? 'Shared stock'} />
+        <button type="button" className="button button-ghost button-mini" disabled={saving} onClick={() => saveVariant(variant)}><Check size={14} /></button>
+        <button type="button" className="button button-danger button-mini" disabled={saving} onClick={() => removeVariant(variant.variant_id)}><Trash2 size={14} /></button>
+      </div>)}
+      <div className="variant-editor-row is-new">
+        <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder={t.adminVariantName ?? 'Option'} />
+        <input type="number" step="0.01" value={draft.price_delta} onChange={e => setDraft({ ...draft, price_delta: e.target.value })} placeholder={t.adminVariantDelta ?? 'Price ±'} />
+        <input type="number" min="0" value={draft.stock_quantity} onChange={e => setDraft({ ...draft, stock_quantity: e.target.value })} placeholder={t.adminVariantInherit ?? 'Shared stock'} />
+        <button type="button" className="button button-dark button-mini" disabled={saving || !draft.name.trim()} onClick={addVariant}><Plus size={14} />{t.adminAddVariant ?? 'Add option'}</button>
+      </div>
+    </div>
+  </div>
 }
 
 type PayMethod = 'cash' | 'wechat' | 'alipay'
@@ -1811,9 +1983,90 @@ function Value({ icon, title, text }: { icon: React.ReactNode; title: string; te
 function StatusPill({ status, t }: { status: Order['payment_status']; t: any }) { return <span className={`status-pill ${status}`}>{t[status]}</span> }
 function PrivacyToggle({ icon, title, text, checked, onChange }: { icon: React.ReactNode; title: string; text: string; checked: boolean; onChange: (checked: boolean) => void }) { return <label className="privacy-row"><span className="privacy-icon">{icon}</span><span><strong>{title}</strong><small>{text}</small></span><input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} /><i /></label> }
 function categoryName(name: string, t: any) { const key = name.toLowerCase(); return t[key] ?? name }
-function availableStock(product: Product, cart: CartItem[]) {
-  const reserved = cart.find(item => item.product_id === product.product_id)?.quantity ?? 0
-  return Math.max(0, product.stock_quantity - reserved)
+// Cart lines are unique per product + variant, so both must be part of the key.
+function lineKey(item: { product_id: number; variant_id?: number }) {
+  return `${item.product_id}:${item.variant_id ?? 0}`
+}
+function variantPrice(product: Product, variant?: ProductVariant | null) {
+  return Number(product.price) + (variant ? Number(variant.price_delta) : 0)
+}
+function variantStock(product: Product, variant?: ProductVariant | null) {
+  return variant?.stock_quantity ?? product.stock_quantity
+}
+function availableStock(product: Product, cart: CartItem[], variant?: ProductVariant | null) {
+  const variantId = variant?.variant_id ?? null
+  const reserved = cart
+    .filter(item => item.product_id === product.product_id && (item.variant_id ?? null) === variantId)
+    .reduce((sum, item) => sum + item.quantity, 0)
+  return Math.max(0, variantStock(product, variant) - reserved)
+}
+
+function VariantChips({ product, selected, onSelect }: { product: Product; selected: number | null; onSelect: (id: number) => void }) {
+  if (!product.variants?.length) return null
+  return <div className="variant-chips">
+    {product.variants.map(variant => {
+      const delta = Number(variant.price_delta)
+      return <button
+        type="button"
+        key={variant.variant_id}
+        className={selected === variant.variant_id ? 'variant-chip active' : 'variant-chip'}
+        onClick={() => onSelect(variant.variant_id)}
+      >
+        {variant.name}
+        {delta !== 0 && <small>{delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}</small>}
+      </button>
+    })}
+  </div>
+}
+
+function HomeProductCard({ product, index, t, cart, locked, addToCart, categoryLabel }: {
+  product: Product; index: number; t: any; cart: CartItem[]; locked: boolean
+  addToCart: (product: Product, variant?: ProductVariant | null) => void; categoryLabel: string
+}) {
+  const [variantId, setVariantId] = useState<number | null>(product.variants?.[0]?.variant_id ?? null)
+  const variant = product.variants?.find(v => v.variant_id === variantId) ?? null
+  const available = availableStock(product, cart, variant)
+  const price = variantPrice(product, variant)
+
+  return <article className="product-card" style={{ '--delay': `${index * 55}ms` } as React.CSSProperties}>
+    <div className="product-image-wrap">
+      <img src={product.image_url ?? productArt[product.product_name] ?? fallbackArt} alt={product.product_name} className="product-image" />
+      <span className={available > 0 ? 'stock-pill' : 'stock-pill sold-out'}>{available > 0 ? `${available} ${t.left}` : t.soldOut}</span>
+      <button className="heart-button" aria-label="Add to favorites"><Heart size={18} /></button>
+    </div>
+    <div className="product-info">
+      <div><span className="product-kind">{categoryLabel}</span><h3>{product.product_name}</h3></div>
+      <p>{product.description}</p>
+      <VariantChips product={product} selected={variantId} onSelect={setVariantId} />
+      <div className="product-bottom"><strong>${price.toFixed(2)}</strong><button disabled={available === 0 || locked} onClick={() => addToCart(product, variant)}>{available === 0 ? t.soldOut : <><Plus size={16} /> {t.add}</>}</button></div>
+    </div>
+  </article>
+}
+
+function CatalogCard({ item, index, t, cart, locked, addToCart, discountPercent, categoryLabel }: {
+  item: Product; index: number; t: any; cart: CartItem[]; locked: boolean
+  addToCart: (product: Product, variant?: ProductVariant | null) => void; discountPercent: number; categoryLabel: string
+}) {
+  const [variantId, setVariantId] = useState<number | null>(item.variants?.[0]?.variant_id ?? null)
+  const variant = item.variants?.find(v => v.variant_id === variantId) ?? null
+  const available = availableStock(item, cart, variant)
+  const reserved = cart
+    .filter(line => line.product_id === item.product_id && (line.variant_id ?? null) === (variant?.variant_id ?? null))
+    .reduce((sum, line) => sum + line.quantity, 0)
+  const soldOut = available === 0
+  const original = variantPrice(item, variant)
+  const finalPrice = discountPercent > 0 ? discountedPrice(original, discountPercent) : original
+
+  return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
+    <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryLabel}</span></div>
+    <div className="catalog-copy">
+      <div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>${original.toFixed(2)}</span>}<strong>${finalPrice.toFixed(2)}</strong></div></div>
+      <p>{item.description}</p>
+      <VariantChips product={item} selected={variantId} onSelect={setVariantId} />
+      <div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div>
+      <button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item, variant)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${finalPrice.toFixed(2)}</>}</button>
+    </div>
+  </article>
 }
 
 export default App

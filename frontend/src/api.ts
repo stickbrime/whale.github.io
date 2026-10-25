@@ -10,6 +10,7 @@ import type {
   Order,
   Product,
   ProductMarketDetail,
+  ProductVariant,
   StaffCustomer,
   StaffProfile,
   StoreSettings,
@@ -109,7 +110,7 @@ export const api = {
     payment_method: 'cash' | 'wechat' | 'alipay' | 'balance' | 'pay_later'
     payment_status: 'pending' | 'paid'
     credit_days?: number
-    items: Array<{ product_id: number; quantity: number; customization?: string }>
+    items: Array<{ product_id: number; quantity: number; customization?: string; variant_id?: number }>
   }) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) }),
 
   adminLogin: (email: string, password: string) =>
@@ -125,11 +126,27 @@ export const api = {
   allOrders: (status?: string) => request<Order[]>(status ? `/orders?payment_status=${status}&limit=200` : '/orders?limit=200'),
   updateOrderStatus: (id: number, payment_status: string) =>
     request<Order>(`/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ payment_status }) }),
-  createProduct: (data: Omit<Product, 'product_id'>) =>
+  createProduct: (data: Omit<Product, 'product_id' | 'variants'>) =>
     request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
-  updateProduct: (id: number, data: Partial<Product>) =>
+  updateProduct: (id: number, data: Partial<Omit<Product, 'variants'>>) =>
     request<Product>(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteProduct: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
+  createVariant: (productId: number, data: { name: string; price_delta: string; stock_quantity: number | null; sort_order: number }) =>
+    request<ProductVariant>(`/products/${productId}/variants`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  updateVariant: (
+    productId: number,
+    variantId: number,
+    data: { name?: string; price_delta?: string; stock_quantity?: number | null; sort_order?: number }
+  ) =>
+    request<ProductVariant>(`/products/${productId}/variants/${variantId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    }),
+  deleteVariant: (productId: number, variantId: number) =>
+    request<void>(`/products/${productId}/variants/${variantId}`, { method: 'DELETE' }),
   adjustStock: (id: number, quantity_change: number) =>
     request<{ product_id: number; stock_quantity: number }>(`/products/${id}/stock`, {
       method: 'PATCH',

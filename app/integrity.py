@@ -23,6 +23,7 @@ def prepare_database(engine: Engine) -> None:
     with engine.begin() as connection:
         _ensure_product_image_url_column(connection)
         _ensure_customer_account_columns(connection)
+        _ensure_order_item_variant_columns(connection)
 
         # Preserve recoverable records rather than deleting them. Invalid user-entered
         # dates are replaced with safe defaults; malformed optional times become NULL.
@@ -275,6 +276,21 @@ def _ensure_customer_account_columns(connection) -> None:
         "seiue_id": "ALTER TABLE customers ADD COLUMN seiue_id INTEGER NULL",
         "feishu_open_id": "ALTER TABLE customers ADD COLUMN feishu_open_id VARCHAR(100) NULL",
         "wechat_open_id": "ALTER TABLE customers ADD COLUMN wechat_open_id VARCHAR(100) NULL",
+    }
+    for column, statement in additions.items():
+        if column not in existing:
+            connection.exec_driver_sql(statement)
+
+
+def _ensure_order_item_variant_columns(connection) -> None:
+    """Add the size/type snapshot columns to a pre-existing order_items table."""
+    rows = connection.exec_driver_sql("PRAGMA table_info(order_items)").fetchall()
+    if not rows:
+        return
+    existing = {r[1] for r in rows}
+    additions = {
+        "variant_id": "ALTER TABLE order_items ADD COLUMN variant_id INTEGER NULL",
+        "variant_name": "ALTER TABLE order_items ADD COLUMN variant_name VARCHAR(60) NULL",
     }
     for column, statement in additions.items():
         if column not in existing:

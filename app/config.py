@@ -33,6 +33,8 @@ class Settings:
     seiue_host: str = os.getenv("ONELOGIN_HOST", "")
     seiue_client_id: str = os.getenv("ONELOGIN_CLIENT_ID", "")
     seiue_client_secret: str = os.getenv("ONELOGIN_CLIENT_SECRET", "")
+    seiue_token_path: str = os.getenv("ONELOGIN_TOKEN_PATH", "/oauth/token")
+    seiue_userinfo_path: str = os.getenv("ONELOGIN_USERINFO_PATH", "/oauth/userinfo")
 
     # Feishu (Lark) open-platform OAuth.
     feishu_app_id: str = os.getenv("FEISHU_APP_ID", "")

@@ -40,8 +40,19 @@ def _generate_pickup_code(n: int = 6) -> str:
 
 
 def restore_inventory(order: models.Order) -> None:
+    from sqlalchemy.orm import object_session
+
+    db = object_session(order)
     for item in order.items:
-        item.product.stock_quantity += item.quantity
+        variant = (
+            db.get(models.ProductVariant, item.variant_id)
+            if db is not None and item.variant_id
+            else None
+        )
+        if variant is not None and variant.stock_quantity is not None:
+            variant.stock_quantity += item.quantity
+        else:
+            item.product.stock_quantity += item.quantity
 
 
 def _transition_status(order: models.Order, new_status: str) -> None:
@@ -128,13 +139,16 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             detail=f"Customer is locked ({reason}). Settle the tab before ordering again.",
         )
 
-    # Merge duplicate product_ids gracefully instead of rejecting with 422.
-    merged_items: Dict[int, schemas.OrderItemCreate] = {}
+    # Merge duplicate lines gracefully instead of rejecting with 422. Lines with
+    # different variants are distinct because their unit prices differ.
+    merged_items: Dict[tuple, schemas.OrderItemCreate] = {}
     for item in payload.items:
-        if item.product_id in merged_items:
-            existing = merged_items[item.product_id]
-            merged_items[item.product_id] = schemas.OrderItemCreate(
+        key = (item.product_id, item.variant_id)
+        if key in merged_items:
+            existing = merged_items[key]
+            merged_items[key] = schemas.OrderItemCreate(
                 product_id=item.product_id,
+                variant_id=item.variant_id,
                 quantity=min(existing.quantity + item.quantity, 100),
                 customization=(
                     " · ".join(filter(None, [existing.customization, item.customization]))
@@ -142,13 +156,15 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
                 ),
             )
         else:
-            merged_items[item.product_id] = item
+            merged_items[key] = item
     payload.items = list(merged_items.values())
 
     # Staff placing an on-site order (employee_id set) bypass storefront
     # rules; self-service app orders must respect opening hours and quotas.
     if payload.employee_id is None:
-        quantities = {item.product_id: item.quantity for item in payload.items}
+        quantities: Dict[int, int] = {}
+        for item in payload.items:
+            quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
         store_settings.enforce_order_rules(
             db, quantities, scheduled=payload.pickup_time is not None
         )
@@ -166,6 +182,24 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             detail=f"Products not found: {missing}",
         )
 
+    variant_ids = [item.variant_id for item in payload.items if item.variant_id]
+    variants_by_id: Dict[int, models.ProductVariant] = {}
+    if variant_ids:
+        variants_by_id = {
+            v.variant_id: v
+            for v in db.scalars(
+                select(models.ProductVariant).where(
+                    models.ProductVariant.variant_id.in_(variant_ids)
+                )
+            ).all()
+        }
+        missing_variants = sorted(set(variant_ids) - set(variants_by_id))
+        if missing_variants:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product variants not found: {missing_variants}",
+            )
+
     order = models.Order(
         customer_id=payload.customer_id,
         employee_id=payload.employee_id,
@@ -178,18 +212,42 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
     total = Decimal("0.00")
     for requested_item in payload.items:
         product = products_by_id[requested_item.product_id]
-        if product.stock_quantity < requested_item.quantity:
+        variant = (
+            variants_by_id.get(requested_item.variant_id)
+            if requested_item.variant_id
+            else None
+        )
+        if variant is not None and variant.product_id != product.product_id:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
+                detail=f"Variant {variant.name} does not belong to {product.product_name}",
+            )
+
+        available = (
+            variant.stock_quantity
+            if variant is not None and variant.stock_quantity is not None
+            else product.stock_quantity
+        )
+        if available < requested_item.quantity:
+            db.rollback()
+            label = f"{product.product_name} ({variant.name})" if variant else product.product_name
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Insufficient stock for {product.product_name}: requested "
-                    f"{requested_item.quantity}, available {product.stock_quantity}"
+                    f"Insufficient stock for {label}: requested "
+                    f"{requested_item.quantity}, available {available}"
                 ),
             )
-        unit_price = Decimal(product.price).quantize(Decimal("0.01"))
+        unit_price = Decimal(product.price) + (
+            Decimal(variant.price_delta) if variant is not None else Decimal("0.00")
+        )
+        unit_price = unit_price.quantize(Decimal("0.01"))
         subtotal = (unit_price * requested_item.quantity).quantize(Decimal("0.01"))
-        product.stock_quantity -= requested_item.quantity
+        if variant is not None and variant.stock_quantity is not None:
+            variant.stock_quantity -= requested_item.quantity
+        else:
+            product.stock_quantity -= requested_item.quantity
         total += subtotal
         order.items.append(
             models.OrderItem(
@@ -198,6 +256,8 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
                 unit_price=unit_price,
                 subtotal=subtotal,
                 customization=requested_item.customization,
+                variant_id=variant.variant_id if variant is not None else None,
+                variant_name=variant.name if variant is not None else None,
             )
         )
     order.total_amount = total.quantize(Decimal("0.01"))
