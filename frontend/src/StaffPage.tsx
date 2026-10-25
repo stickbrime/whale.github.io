@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   BadgeCheck,
+  Banknote,
   Check,
   Clock3,
   LoaderCircle,
@@ -9,13 +10,14 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
-  Users
+  Users,
+  Wallet
 } from 'lucide-react'
 import { api } from './api'
 import { LoginPage } from './LoginPage'
-import type { AuditLog, Order, Product, StaffCustomer, StaffProfile, StoreSettings } from './types'
+import type { AuditLog, Order, StaffCustomer, StaffProfile, StoreSettings } from './types'
 
-type Tab = 'orders' | 'storefront' | 'users' | 'settings' | 'logs'
+type Tab = 'orders' | 'charge'
 type Queue = 'waiting' | 'done' | 'all'
 
 const PERMISSIONS = [
@@ -83,10 +85,7 @@ export function StaffPage({ t, onLogin }: { t: any; onLogin: () => Promise<void>
 
   const tabs: { id: Tab; label: string; permission: string }[] = [
     { id: 'orders', label: t.staffOrders, permission: 'orders.view' },
-    { id: 'storefront', label: t.staffStorefront, permission: 'storefront.manage' },
-    { id: 'users', label: t.staffUsers, permission: 'users.view' },
-    { id: 'settings', label: t.staffSettings, permission: 'settings.manage' },
-    { id: 'logs', label: t.staffLogs, permission: 'logs.view' }
+    { id: 'charge', label: t.staffCharge, permission: 'orders.manage' }
   ]
   const visible = tabs.filter(entry => can(entry.permission))
   const active = visible.some(entry => entry.id === tab) ? tab : visible[0]?.id
@@ -123,10 +122,7 @@ export function StaffPage({ t, onLogin }: { t: any; onLogin: () => Promise<void>
             </div>
 
             {active === 'orders' && <OrdersTab t={t} canManage={can('orders.manage')} />}
-            {active === 'storefront' && <StorefrontTab t={t} />}
-            {active === 'users' && <UsersTab t={t} canManage={can('users.manage')} />}
-            {active === 'settings' && <SettingsTab t={t} />}
-            {active === 'logs' && <LogsTab t={t} />}
+            {active === 'charge' && <ChargeTab t={t} />}
           </>
         )}
       </div>
@@ -210,7 +206,7 @@ function OrdersTab({ t, canManage }: { t: any; canManage: boolean }) {
                   <td>#{order.order_id}<small>{order.pickup_time?.slice(0, 5) ?? 'ASAP'}</small></td>
                   <td>{order.customer_name ?? '—'}<small>{order.payment_method}</small></td>
                   <td>{order.items.map(item => `${item.quantity}× ${item.product.product_name}`).join(', ')}</td>
-                  <td className="num">${Number(order.total_amount).toFixed(2)}</td>
+                  <td className="num">¥{Number(order.total_amount).toFixed(2)}</td>
                   <td>{order.pickup_code ?? '—'}</td>
                   <td>
                     <span className={`staff-pill ${order.fulfillment_status}`}>
@@ -245,68 +241,189 @@ function OrdersTab({ t, canManage }: { t: any; canManage: boolean }) {
   )
 }
 
-function StorefrontTab({ t }: { t: any }) {
-  const [products, setProducts] = useState<Product[]>([])
+function ChargeTab({ t }: { t: any }) {
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState<StaffCustomer[]>([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<number | null>(null)
+  const [selected, setSelected] = useState<StaffCustomer | null>(null)
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [receipt, setReceipt] = useState<{ name: string; amount: number; balance: number } | null>(null)
 
   useEffect(() => {
-    api.staffProducts().then(setProducts).catch(() => setProducts([])).finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    api.staffUsers(search.trim() || undefined)
+      .then(setResults)
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false))
+  }, [search])
 
-  const adjust = async (product: Product, delta: number) => {
-    setBusy(product.product_id)
+  const value = Number(amount) || 0
+  const balance = selected ? Number(selected.balance) : 0
+  const overBalance = selected !== null && value > balance
+
+  const pick = (user: StaffCustomer) => {
+    setSelected(user)
+    setAmount('')
+    setNote('')
+    setError('')
+    setReceipt(null)
+  }
+
+  const charge = async () => {
+    if (!selected || value <= 0) {
+      setError(t.staffChargeInvalid)
+      return
+    }
+    if (overBalance) {
+      setError(t.staffChargeInsufficient)
+      return
+    }
+    setBusy(true)
+    setError('')
     try {
-      const result = await api.staffAdjustStock(product.product_id, delta)
-      setProducts(current => current.map(row =>
-        row.product_id === result.product_id ? { ...row, stock_quantity: result.stock_quantity } : row
-      ))
+      const updated = await api.staffCharge(selected.customer_id, amount, note.trim() || undefined)
+      setSelected(updated)
+      setResults(current => current.map(row => row.customer_id === updated.customer_id ? updated : row))
+      setReceipt({
+        name: `${updated.first_name} ${updated.last_name}`.trim() || updated.email,
+        amount: value,
+        balance: Number(updated.balance)
+      })
+      setAmount('')
+      setNote('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.apiOffline)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
-  if (loading) return <div className="loading-block"><LoaderCircle className="spin" /><span>{t.brewing}</span></div>
-
   return (
-    <section className="admin-section">
-      <div className="admin-table-wrap">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>{t.adminProductName}</th>
-              <th className="num">{t.adminProductPrice}</th>
-              <th>{t.adminProductStock}</th>
-              <th>{t.adminOrderActions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map(product => (
-              <tr key={product.product_id}>
-                <td>{product.product_name}<small>{product.description}</small></td>
-                <td className="num">${Number(product.price).toFixed(2)}</td>
-                <td>
-                  <span className={product.stock_quantity > 0 ? 'staff-stock' : 'staff-stock empty'}>
-                    {product.stock_quantity}
+    <section className="admin-section charge-section">
+      <div className="charge-grid">
+        <div className="charge-card">
+          <span className="eyebrow">01</span>
+          <h2>{t.staffFindCustomer}</h2>
+          <p>{t.staffFindCustomerSub}</p>
+          <label className="staff-search charge-search">
+            <Search size={15} />
+            <input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder={t.staffChargeSearchPlaceholder}
+            />
+          </label>
+
+          {loading ? (
+            <div className="loading-block"><LoaderCircle className="spin" /><span>{t.brewing}</span></div>
+          ) : results.length === 0 ? (
+            <p className="muted charge-empty">{t.staffNoUsers}</p>
+          ) : (
+            <div className="charge-results">
+              {results.map(user => {
+                const active = selected?.customer_id === user.customer_id
+                return (
+                  <button
+                    key={user.customer_id}
+                    type="button"
+                    className={active ? 'charge-result selected' : 'charge-result'}
+                    onClick={() => pick(user)}
+                  >
+                    <span className="avatar">{(user.first_name[0] ?? '')}{(user.last_name[0] ?? '')}</span>
+                    <span className="charge-result-copy">
+                      <strong>{user.first_name} {user.last_name}</strong>
+                      <small>{user.email} · {user.phone}</small>
+                    </span>
+                    <span className="charge-result-balance">¥{Number(user.balance).toFixed(2)}</span>
+                    {active ? <Check size={15} /> : null}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="charge-card">
+          <span className="eyebrow">02</span>
+          <h2>{t.staffChargeTitle}</h2>
+          <p>{t.staffChargeSub}</p>
+
+          {!selected ? (
+            <div className="charge-placeholder">
+              <Wallet size={26} />
+              <p>{t.staffPickCustomer}</p>
+            </div>
+          ) : (
+            <>
+              <div className="charge-customer">
+                <span className="avatar">{(selected.first_name[0] ?? '')}{(selected.last_name[0] ?? '')}</span>
+                <div>
+                  <strong>{selected.first_name} {selected.last_name}</strong>
+                  <small>{selected.email}</small>
+                </div>
+                <div className="charge-customer-balance">
+                  <span>{t.staffChargeBalance}</span>
+                  <strong>¥{balance.toFixed(2)}</strong>
+                </div>
+              </div>
+
+              <label className="charge-label">{t.staffChargeAmount}</label>
+              <div className="charge-amount-field">
+                <span>¥</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={event => { setAmount(event.target.value); setError(''); setReceipt(null) }}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="charge-quick">
+                {[5, 10, 20, 50].map(quick => (
+                  <button key={quick} type="button" onClick={() => { setAmount(String(quick)); setError(''); setReceipt(null) }}>
+                    ¥{quick}
+                  </button>
+                ))}
+                {overBalance && <span className="charge-warning">{t.staffChargeInsufficient}</span>}
+              </div>
+
+              <label className="charge-label">{t.staffChargeNote}</label>
+              <input
+                className="charge-note"
+                value={note}
+                maxLength={200}
+                onChange={event => setNote(event.target.value)}
+                placeholder={t.staffChargeNotePlaceholder}
+              />
+
+              {receipt && (
+                <div className="charge-success">
+                  <Check size={16} />
+                  <span>
+                    {t.staffChargeDone} {receipt.name} · −¥{receipt.amount.toFixed(2)} · {t.staffNewBalance} ¥{receipt.balance.toFixed(2)}
                   </span>
-                </td>
-                <td>
-                  <div className="staff-stock-actions">
-                    <button disabled={busy === product.product_id} onClick={() => adjust(product, 1)}>+1</button>
-                    <button disabled={busy === product.product_id || product.stock_quantity === 0} onClick={() => adjust(product, -1)}>−1</button>
-                    <button disabled={busy === product.product_id} onClick={() => adjust(product, 10)}>+10</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              )}
+              {error && <div className="inline-error">{error}</div>}
+
+              <button className="button button-dark full" disabled={busy || value <= 0 || overBalance} onClick={charge}>
+                {busy
+                  ? <><LoaderCircle className="spin" />{t.staffCharging}</>
+                  : <><Banknote size={16} />{t.staffChargeSubmit} ¥{value.toFixed(2)}</>}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </section>
   )
 }
 
-function UsersTab({ t, canManage }: { t: any; canManage: boolean }) {
+export function UsersTab({ t, canManage }: { t: any; canManage: boolean }) {
   const [search, setSearch] = useState('')
   const [users, setUsers] = useState<StaffCustomer[]>([])
   const [loading, setLoading] = useState(true)
@@ -473,7 +590,7 @@ function UserRow({
   )
 }
 
-function SettingsTab({ t }: { t: any }) {
+export function SettingsTab({ t }: { t: any }) {
   const [settings, setSettings] = useState<StoreSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -559,7 +676,7 @@ function SettingsTab({ t }: { t: any }) {
   )
 }
 
-function LogsTab({ t }: { t: any }) {
+export function LogsTab({ t }: { t: any }) {
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
 

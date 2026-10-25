@@ -1,6 +1,7 @@
 export type ProductVariant = {
   variant_id: number
   name: string
+  group_name: string
   price_delta: string
   stock_quantity: number | null
   sort_order: number
@@ -45,6 +46,7 @@ export type OrderItem = {
   subtotal: string
   customization: string | null
   variant_name: string | null
+  temperature_name: string | null
   product_id: number
   product: { product_id: number; product_name: string }
 }
@@ -74,6 +76,8 @@ export type CartItem = Product & {
   customization?: string
   variant_id?: number
   variant_name?: string
+  temperature_variant_id?: number
+  temperature_name?: string
 }
 
 export type Language = 'en' | 'zh'

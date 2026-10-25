@@ -132,7 +132,7 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
         reason = (
             f"overdue orders {credit.overdue_orders}"
             if credit.overdue_orders
-            else f"outstanding balance ${credit.outstanding_amount}"
+            else f"outstanding balance ¥{credit.outstanding_amount}"
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -143,12 +143,13 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
     # different variants are distinct because their unit prices differ.
     merged_items: Dict[tuple, schemas.OrderItemCreate] = {}
     for item in payload.items:
-        key = (item.product_id, item.variant_id)
+        key = (item.product_id, item.variant_id, item.temperature_variant_id)
         if key in merged_items:
             existing = merged_items[key]
             merged_items[key] = schemas.OrderItemCreate(
                 product_id=item.product_id,
                 variant_id=item.variant_id,
+                temperature_variant_id=item.temperature_variant_id,
                 quantity=min(existing.quantity + item.quantity, 100),
                 customization=(
                     " · ".join(filter(None, [existing.customization, item.customization]))
@@ -182,7 +183,13 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             detail=f"Products not found: {missing}",
         )
 
-    variant_ids = [item.variant_id for item in payload.items if item.variant_id]
+    variant_ids = [
+        item.variant_id for item in payload.items if item.variant_id
+    ] + [
+        item.temperature_variant_id
+        for item in payload.items
+        if item.temperature_variant_id
+    ]
     variants_by_id: Dict[int, models.ProductVariant] = {}
     if variant_ids:
         variants_by_id = {
@@ -223,6 +230,20 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Variant {variant.name} does not belong to {product.product_name}",
             )
+        temperature = (
+            variants_by_id.get(requested_item.temperature_variant_id)
+            if requested_item.temperature_variant_id
+            else None
+        )
+        if temperature is not None and (
+            temperature.product_id != product.product_id
+            or temperature.group_name != "Temperature"
+        ):
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Temperature {temperature.name} does not belong to {product.product_name}",
+            )
 
         available = (
             variant.stock_quantity
@@ -241,6 +262,8 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
             )
         unit_price = Decimal(product.price) + (
             Decimal(variant.price_delta) if variant is not None else Decimal("0.00")
+        ) + (
+            Decimal(temperature.price_delta) if temperature is not None else Decimal("0.00")
         )
         unit_price = unit_price.quantize(Decimal("0.01"))
         subtotal = (unit_price * requested_item.quantity).quantize(Decimal("0.01"))
@@ -258,6 +281,10 @@ def create_order(payload: schemas.OrderCreate, db: Session = Depends(get_db)):
                 customization=requested_item.customization,
                 variant_id=variant.variant_id if variant is not None else None,
                 variant_name=variant.name if variant is not None else None,
+                temperature_variant_id=(
+                    temperature.variant_id if temperature is not None else None
+                ),
+                temperature_name=temperature.name if temperature is not None else None,
             )
         )
     order.total_amount = total.quantize(Decimal("0.01"))

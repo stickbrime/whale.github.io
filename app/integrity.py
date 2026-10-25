@@ -24,6 +24,7 @@ def prepare_database(engine: Engine) -> None:
         _ensure_product_image_url_column(connection)
         _ensure_customer_account_columns(connection)
         _ensure_order_item_variant_columns(connection)
+        _ensure_product_variant_group_column(connection)
 
         # Preserve recoverable records rather than deleting them. Invalid user-entered
         # dates are replaced with safe defaults; malformed optional times become NULL.
@@ -283,7 +284,7 @@ def _ensure_customer_account_columns(connection) -> None:
 
 
 def _ensure_order_item_variant_columns(connection) -> None:
-    """Add the size/type snapshot columns to a pre-existing order_items table."""
+    """Add the size/type and temperature snapshot columns to order_items."""
     rows = connection.exec_driver_sql("PRAGMA table_info(order_items)").fetchall()
     if not rows:
         return
@@ -291,10 +292,29 @@ def _ensure_order_item_variant_columns(connection) -> None:
     additions = {
         "variant_id": "ALTER TABLE order_items ADD COLUMN variant_id INTEGER NULL",
         "variant_name": "ALTER TABLE order_items ADD COLUMN variant_name VARCHAR(60) NULL",
+        "temperature_variant_id": (
+            "ALTER TABLE order_items ADD COLUMN temperature_variant_id INTEGER NULL"
+        ),
+        "temperature_name": (
+            "ALTER TABLE order_items ADD COLUMN temperature_name VARCHAR(60) NULL"
+        ),
     }
     for column, statement in additions.items():
         if column not in existing:
             connection.exec_driver_sql(statement)
+
+
+def _ensure_product_variant_group_column(connection) -> None:
+    """Add the variant group column (Size / Temperature) to product_variants."""
+    rows = connection.exec_driver_sql("PRAGMA table_info(product_variants)").fetchall()
+    if not rows:
+        return
+    existing = {r[1] for r in rows}
+    if "group_name" not in existing:
+        connection.exec_driver_sql(
+            "ALTER TABLE product_variants ADD COLUMN group_name VARCHAR(40) "
+            "NOT NULL DEFAULT 'Size'"
+        )
 
 
 

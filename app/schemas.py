@@ -157,6 +157,7 @@ class ProductUpdate(BaseModel):
 
 class ProductVariantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+    group_name: str = Field(default="Size", min_length=1, max_length=40)
     price_delta: Decimal = Field(default=Decimal("0.00"), max_digits=10, decimal_places=2)
     stock_quantity: Optional[int] = Field(default=None, ge=0)
     sort_order: int = 0
@@ -164,6 +165,7 @@ class ProductVariantCreate(BaseModel):
 
 class ProductVariantUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    group_name: Optional[str] = Field(default=None, min_length=1, max_length=40)
     price_delta: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
     stock_quantity: Optional[int] = Field(default=None, ge=0)
     sort_order: Optional[int] = None
@@ -172,6 +174,7 @@ class ProductVariantUpdate(BaseModel):
 class ProductVariantRead(ORMModel):
     variant_id: int
     name: str
+    group_name: str = "Size"
     price_delta: Decimal
     stock_quantity: Optional[int]
     sort_order: int
@@ -192,6 +195,7 @@ class OrderItemCreate(BaseModel):
     quantity: int = Field(gt=0, le=100)
     customization: Optional[str] = Field(default=None, max_length=1000)
     variant_id: Optional[int] = Field(default=None, gt=0)
+    temperature_variant_id: Optional[int] = Field(default=None, gt=0)
 
 
 class OrderCreate(BaseModel):
@@ -217,6 +221,7 @@ class OrderItemRead(ORMModel):
     subtotal: Decimal
     customization: Optional[str]
     variant_name: Optional[str] = None
+    temperature_name: Optional[str] = None
     product_id: int
     product: ProductSummary
 
@@ -545,6 +550,16 @@ class StaffUserUpdate(BaseModel):
     loyalty_points: Optional[int] = Field(default=None, ge=0)
     balance_delta: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
     note: Optional[str] = Field(default=None, max_length=200)
+
+
+class StaffChargeRequest(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=200)
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
 
 
 class AuditLogRead(ORMModel):

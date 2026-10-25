@@ -249,6 +249,54 @@ def update_user(
     return result
 
 
+@router.post("/users/{customer_id}/charge", response_model=schemas.StaffCustomerRead)
+def charge_customer(
+    customer_id: int,
+    payload: schemas.StaffChargeRequest,
+    actor: Optional[models.Customer] = Depends(require_permission("orders.manage")),
+    db: Session = Depends(get_db),
+):
+    """Deduct an amount from a customer's wallet on their behalf.
+
+    The signed ledger row is written to ``balance_transactions`` so the charge
+    also appears in the customer's own wallet history.
+    """
+    entry = get_or_404(db, models.Customer, customer_id, "Customer")
+    amount = payload.amount
+    balance = Decimal(entry.balance).quantize(Decimal("0.01"))
+    if balance < amount:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Insufficient balance: ¥{balance} available",
+        )
+
+    store_settings.add_balance_entry(
+        db,
+        entry,
+        -amount,
+        "payment",
+        note=payload.note or "Volunteer charge",
+    )
+    store_settings.record_audit(
+        db,
+        actor.customer_id if actor else None,
+        "balanceCharged",
+        target=f"customer:{entry.customer_id}",
+        detail=f"-¥{amount}" + (f" · {payload.note}" if payload.note else ""),
+    )
+    db.commit()
+    db.refresh(entry)
+
+    order_count = db.scalar(
+        select(func.count(models.Order.order_id)).where(
+            models.Order.customer_id == entry.customer_id
+        )
+    )
+    result = schemas.StaffCustomerRead.model_validate(entry)
+    result.order_count = int(order_count or 0)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Audit trail
 # ---------------------------------------------------------------------------
@@ -267,49 +315,6 @@ def list_logs(
     return db.scalars(
         query.order_by(models.AuditLog.created_at.desc(), models.AuditLog.audit_log_id.desc()).limit(limit)
     ).all()
-
-
-# ---------------------------------------------------------------------------
-# Storefront (menu + stock)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/products", response_model=List[schemas.ProductRead])
-def staff_products(
-    _: Optional[models.Customer] = Depends(require_permission("storefront.manage")),
-    db: Session = Depends(get_db),
-):
-    return db.scalars(
-        select(models.Product).order_by(models.Product.product_id.asc())
-    ).all()
-
-
-@router.patch("/products/{product_id}/stock", response_model=schemas.StockResponse)
-def staff_adjust_stock(
-    product_id: int,
-    payload: schemas.StockAdjustment,
-    customer: Optional[models.Customer] = Depends(require_permission("storefront.manage")),
-    db: Session = Depends(get_db),
-):
-    product = get_or_404(db, models.Product, product_id, "Product")
-    new_quantity = product.stock_quantity + payload.quantity_change
-    if new_quantity < 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Stock cannot drop below zero",
-        )
-    product.stock_quantity = new_quantity
-    store_settings.record_audit(
-        db,
-        customer.customer_id if customer else None,
-        "stockAdjusted",
-        target=f"product:{product.product_id}",
-        detail=f"{payload.quantity_change:+d} → {new_quantity}",
-    )
-    db.commit()
-    return schemas.StockResponse(
-        product_id=product.product_id, stock_quantity=product.stock_quantity
-    )
 
 
 @router.get("/permissions")

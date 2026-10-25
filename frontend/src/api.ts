@@ -91,11 +91,10 @@ export const api = {
     }
   ) => request<StaffCustomer>(`/staff/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   staffLogs: () => request<AuditLog[]>('/staff/logs'),
-  staffProducts: () => request<Product[]>('/staff/products'),
-  staffAdjustStock: (id: number, quantity_change: number) =>
-    request<{ product_id: number; stock_quantity: number }>(`/staff/products/${id}/stock`, {
-      method: 'PATCH',
-      body: JSON.stringify({ quantity_change })
+  staffCharge: (id: number, amount: string, note?: string) =>
+    request<StaffCustomer>(`/staff/users/${id}/charge`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, note })
     }),
   logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
   payOrder: (id: number) => request<Order>(`/orders/${id}/pay`, { method: 'POST' }),
@@ -110,7 +109,7 @@ export const api = {
     payment_method: 'cash' | 'wechat' | 'alipay' | 'balance' | 'pay_later'
     payment_status: 'pending' | 'paid'
     credit_days?: number
-    items: Array<{ product_id: number; quantity: number; customization?: string; variant_id?: number }>
+    items: Array<{ product_id: number; quantity: number; customization?: string; variant_id?: number; temperature_variant_id?: number }>
   }) => request<Order>('/orders', { method: 'POST', body: JSON.stringify(data) }),
 
   adminLogin: (email: string, password: string) =>
@@ -131,7 +130,7 @@ export const api = {
   updateProduct: (id: number, data: Partial<Omit<Product, 'variants'>>) =>
     request<Product>(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteProduct: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
-  createVariant: (productId: number, data: { name: string; price_delta: string; stock_quantity: number | null; sort_order: number }) =>
+  createVariant: (productId: number, data: { name: string; group_name?: string; price_delta: string; stock_quantity: number | null; sort_order: number }) =>
     request<ProductVariant>(`/products/${productId}/variants`, {
       method: 'POST',
       body: JSON.stringify(data)
@@ -139,7 +138,7 @@ export const api = {
   updateVariant: (
     productId: number,
     variantId: number,
-    data: { name?: string; price_delta?: string; stock_quantity?: number | null; sort_order?: number }
+    data: { name?: string; group_name?: string; price_delta?: string; stock_quantity?: number | null; sort_order?: number }
   ) =>
     request<ProductVariant>(`/products/${productId}/variants/${variantId}`, {
       method: 'PATCH',

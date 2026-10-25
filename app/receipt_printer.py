@@ -136,11 +136,11 @@ def build_receipt(
     for item in items:
         name, qty, unit_price, subtotal = _item_info(item)
         buf += _enc(name[:WIDTH]) + b"\n"
-        buf += _row_b(f"  {qty}x {unit_price}", f"￥{subtotal}")
+        buf += _row_b(f"  {qty}x {unit_price}", f"¥{subtotal}")
     buf += _line_b("-")
 
     buf += BOLD_ON + DBL_ON
-    buf += _row_b("合计", f"￥{total}")
+    buf += _row_b("合计", f"¥{total}")
     buf += DBL_OFF + BOLD_OFF
     buf += _line_b("=")
 
@@ -195,9 +195,9 @@ def build_receipt_text(
     for item in items:
         name, qty, unit_price, subtotal = _item_info(item)
         lines.append(name[:WIDTH])
-        lines.append(_row_t(f"  {qty}x {unit_price}", f"￥{subtotal}"))
+        lines.append(_row_t(f"  {qty}x {unit_price}", f"¥{subtotal}"))
     lines.append(_line_t("-"))
-    lines.append(_row_t("合计", f"￥{total}"))
+    lines.append(_row_t("合计", f"¥{total}"))
     lines.append(_line_t("="))
     lines.append(_row_t("支付方式:", PAYMENT_METHOD_CN.get(payment_method, payment_method)))
     lines.append(_row_t("支付状态:", PAYMENT_STATUS_CN.get(payment_status, payment_status)))

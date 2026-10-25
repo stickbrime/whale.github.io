@@ -36,7 +36,7 @@ import {
 import { api } from './api'
 import { copy } from './i18n'
 import { LoginPage } from './LoginPage'
-import { StaffPage } from './StaffPage'
+import { StaffPage, UsersTab, SettingsTab, LogsTab } from './StaffPage'
 import type { AuthStatus, BalanceTransaction, CartItem, Category, ClaimedCoupon, Coupon, CreditStatus, Customer, Language, MarketOverview, MarketProductStat, Order, OverviewTimeseriesPoint, Product, ProductMarketDetail, ProductSaleRecord, ProductTimeseriesPoint, ProductVariant, StoreStatus, WalletSummary } from './types'
 
 const productArt: Record<string, string> = {
@@ -146,14 +146,21 @@ function App() {
   }, [couponPopupSeen])
 
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const addToCart = (product: Product, variant?: ProductVariant | null) => {
+  const addToCart = (product: Product, variant?: ProductVariant | null, temperature?: ProductVariant | null) => {
     const variantId = variant?.variant_id
+    const temperatureId = temperature?.variant_id
     const stock = variant?.stock_quantity ?? product.stock_quantity
-    const price = variant ? Number(product.price) + Number(variant.price_delta) : Number(product.price)
+    const price = Number(product.price)
+      + (variant ? Number(variant.price_delta) : 0)
+      + (temperature ? Number(temperature.price_delta) : 0)
     setCart(current => {
-      const found = current.find(item => item.product_id === product.product_id && item.variant_id === variantId)
+      const isSameLine = (item: CartItem) =>
+        item.product_id === product.product_id
+        && item.variant_id === variantId
+        && item.temperature_variant_id === temperatureId
+      const found = current.find(isSameLine)
       return found
-        ? current.map(item => item.product_id === product.product_id && item.variant_id === variantId
+        ? current.map(item => isSameLine(item)
           ? { ...item, quantity: Math.min(item.quantity + 1, stock) }
           : item)
         : [...current, {
@@ -162,7 +169,9 @@ function App() {
             stock_quantity: stock,
             quantity: 1,
             variant_id: variantId,
-            variant_name: variant?.name
+            variant_name: variant?.name,
+            temperature_variant_id: temperatureId,
+            temperature_name: temperature?.name
           }]
     })
     setToast(t.cartUpdated)
@@ -454,9 +463,9 @@ function ShopPage({ t, addToCart, locked, cart, coupon, onRemoveCoupon }: { t: a
 
 function CartPage({ t, cart, setCart }: { t: any; cart: CartItem[]; setCart: (value: CartItem[] | ((current: CartItem[]) => CartItem[])) => void }) {
   const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0)
-  const updateQuantity = (id: number, variantId: number | undefined, delta: number) => setCart(current => current.map(item => item.product_id === id && item.variant_id === variantId ? { ...item, quantity: Math.max(0, Math.min(item.stock_quantity, item.quantity + delta)) } : item).filter(item => item.quantity > 0))
-  const customize = (id: number, variantId: number | undefined, value: string) => setCart(current => current.map(item => item.product_id === id && item.variant_id === variantId ? { ...item, customization: value } : item))
-  const removeLine = (id: number, variantId: number | undefined) => setCart(current => current.filter(x => !(x.product_id === id && x.variant_id === variantId)))
+  const updateQuantity = (key: string, delta: number) => setCart(current => current.map(item => lineKey(item) === key ? { ...item, quantity: Math.max(0, Math.min(item.stock_quantity, item.quantity + delta)) } : item).filter(item => item.quantity > 0))
+  const customize = (key: string, value: string) => setCart(current => current.map(item => lineKey(item) === key ? { ...item, customization: value } : item))
+  const removeLine = (key: string) => setCart(current => current.filter(x => lineKey(x) !== key))
 
   return <section className="page-section"><div className="container narrow-page">
     <div className="cart-title-row"><PageTitle eyebrow="YOUR SELECTION" title={t.yourCart} subtitle={t.cartSub} />{cart.length > 0 && <button className="clear-cart" onClick={() => { if (window.confirm(t.clearCartConfirm)) setCart([]) }}><Trash2 />{t.clearCart}</button>}</div>
@@ -465,14 +474,14 @@ function CartPage({ t, cart, setCart }: { t: any; cart: CartItem[]; setCart: (va
         <div className="cart-list">
           {cart.map(item => <article className="cart-item" key={lineKey(item)}>
             <img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" />
-            <div className="cart-item-main"><div className="cart-item-title"><div><span>{item.variant_name ?? t.coffee}</span><h3>{item.product_name}</h3></div><strong>${(Number(item.price) * item.quantity).toFixed(2)}</strong></div>
-              <p>${Number(item.price).toFixed(2)} {t.each}{item.variant_name && <> · {item.variant_name}</>}</p>
-              <input className="customization-input" placeholder={`${t.customization} (${t.optional})`} value={item.customization ?? ''} onChange={e => customize(item.product_id, item.variant_id, e.target.value)} />
-              <div className="cart-item-actions"><div className="stepper"><button onClick={() => updateQuantity(item.product_id, item.variant_id, -1)}><Minus size={15} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.product_id, item.variant_id, 1)}><Plus size={15} /></button></div><button className="text-button danger" onClick={() => removeLine(item.product_id, item.variant_id)}><Trash2 size={15} />{t.remove}</button></div>
+            <div className="cart-item-main"><div className="cart-item-title"><div><span>{item.variant_name ?? t.coffee}</span><h3>{item.product_name}</h3></div><strong>¥{(Number(item.price) * item.quantity).toFixed(2)}</strong></div>
+              <p>¥{Number(item.price).toFixed(2)} {t.each}{item.variant_name && <> · {item.variant_name}</>}{item.temperature_name && <> · {item.temperature_name}</>}</p>
+              <input className="customization-input" placeholder={`${t.customization} (${t.optional})`} value={item.customization ?? ''} onChange={e => customize(lineKey(item), e.target.value)} />
+              <div className="cart-item-actions"><div className="stepper"><button onClick={() => updateQuantity(lineKey(item), -1)}><Minus size={15} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(lineKey(item), 1)}><Plus size={15} /></button></div><button className="text-button danger" onClick={() => removeLine(lineKey(item))}><Trash2 size={15} />{t.remove}</button></div>
             </div>
           </article>)}
         </div>
-        <aside className="order-summary"><span className="eyebrow">{t.currentOrder}</span><h2>{t.total}</h2><div className="summary-line"><span>{t.subtotal}</span><span>${subtotal.toFixed(2)}</span></div><div className="summary-line"><span>{t.service}</span><span>—</span></div><div className="summary-total"><span>{t.total}</span><strong>${subtotal.toFixed(2)}</strong></div><Link className="button button-dark full" to="/checkout">{t.continueCheckout}<ArrowRight size={17} /></Link><Link className="continue-link" to="/"><ArrowLeft size={14} />{t.editOrder}</Link></aside>
+        <aside className="order-summary"><span className="eyebrow">{t.currentOrder}</span><h2>{t.total}</h2><div className="summary-line"><span>{t.subtotal}</span><span>¥{subtotal.toFixed(2)}</span></div><div className="summary-line"><span>{t.service}</span><span>—</span></div><div className="summary-total"><span>{t.total}</span><strong>¥{subtotal.toFixed(2)}</strong></div><Link className="button button-dark full" to="/checkout">{t.continueCheckout}<ArrowRight size={17} /></Link><Link className="continue-link" to="/"><ArrowLeft size={14} />{t.editOrder}</Link></aside>
       </div>
     )}
   </div></section>
@@ -523,7 +532,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
   const createOrder = async (id: number, method: BackendPayMethod) => {
     const tabNote = payment === 'pending' ? `[Tab: ${creditDays} days]` : ''
     // Merge identical product+variant lines — the backend rejects duplicate lines.
-    const merged: Record<string, { product_id: number; variant_id?: number; quantity: number; customization: string | undefined }> = {}
+    const merged: Record<string, { product_id: number; variant_id?: number; temperature_variant_id?: number; quantity: number; customization: string | undefined }> = {}
     for (const item of cart) {
       const key = lineKey(item)
       const note = [item.customization, tabNote].filter(Boolean).join(' · ') || undefined
@@ -531,7 +540,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
         merged[key].quantity += item.quantity
         if (note) merged[key].customization = [merged[key].customization, note].filter(Boolean).join(' · ') || undefined
       } else {
-        merged[key] = { product_id: item.product_id, variant_id: item.variant_id, quantity: item.quantity, customization: note }
+        merged[key] = { product_id: item.product_id, variant_id: item.variant_id, temperature_variant_id: item.temperature_variant_id, quantity: item.quantity, customization: note }
       }
     }
     const order = await api.createOrder({
@@ -584,7 +593,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
         // the dedicated /pay page, which shows the QR and polls until the
         // backend reports the order paid.
         const couponNote = claimedCoupon ? `[Coupon: ${claimedCoupon.code} -${Number(claimedCoupon.discount_percent)}%]` : ''
-        const merged: Record<string, { product_id: number; variant_id?: number; quantity: number; customization: string | undefined }> = {}
+        const merged: Record<string, { product_id: number; variant_id?: number; temperature_variant_id?: number; quantity: number; customization: string | undefined }> = {}
         for (const item of cart) {
           const key = lineKey(item)
           const note = [item.customization, couponNote].filter(Boolean).join(' · ') || undefined
@@ -592,7 +601,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
             merged[key].quantity += item.quantity
             if (note) merged[key].customization = [merged[key].customization, note].filter(Boolean).join(' · ') || undefined
           } else {
-            merged[key] = { product_id: item.product_id, variant_id: item.variant_id, quantity: item.quantity, customization: note }
+            merged[key] = { product_id: item.product_id, variant_id: item.variant_id, temperature_variant_id: item.temperature_variant_id, quantity: item.quantity, customization: note }
           }
         }
         const order = await api.createOrder({
@@ -628,7 +637,7 @@ function CheckoutPage({ t, cart, clearCart, customerId, setCustomerId, auth, cla
           {payment === 'pending' && <div className="credit-terms"><div><strong>{t.tabLength}</strong><span>{creditDays} {t.days}</span></div><input type="range" min="1" max="14" step="1" value={creditDays} onChange={e => setCreditDays(Number(e.target.value))} /><div className="range-labels"><span>1 {t.days}</span><span>7 {t.days}</span><span>14 {t.days}</span></div><small>{t.maxTwoWeeks}</small><p><ShieldCheck size={15} /> {t.dueOn} {new Date(Date.now() + creditDays * 86400000).toLocaleDateString()}.</p></div>}
         </section>
       </div>
-      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={lineKey(item)}><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}{item.variant_name && <span className="cart-variant">{item.variant_name}</span>}</strong><small>{item.quantity} × ${Number(item.price).toFixed(2)}</small></div><span>${(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}{claimedCoupon && <div className="summary-coupon"><div className="summary-coupon-line"><Tag size={14} /><span><strong>{claimedCoupon.code}</strong> · {Number(claimedCoupon.discount_percent)}% {t.couponBannerOff}</span></div><div className="summary-line"><span>{t.subtotal}</span><span>${subtotal.toFixed(2)}</span></div><div className="summary-line discount"><span>{t.couponBannerTitle}</span><span>−${(subtotal - total).toFixed(2)}</span></div></div>}<div className="summary-total"><span>{t.total}</span><strong>${total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
+      <aside className="checkout-summary order-summary"><span className="eyebrow">{t.currentOrder}</span>{cart.map(item => <div className="mini-item" key={lineKey(item)}><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt="" /><div><strong>{item.product_name}{item.variant_name && <span className="cart-variant">{item.variant_name}</span>}</strong><small>{item.quantity} × ¥{Number(item.price).toFixed(2)}</small></div><span>¥{(item.quantity * Number(item.price)).toFixed(2)}</span></div>)}{claimedCoupon && <div className="summary-coupon"><div className="summary-coupon-line"><Tag size={14} /><span><strong>{claimedCoupon.code}</strong> · {Number(claimedCoupon.discount_percent)}% {t.couponBannerOff}</span></div><div className="summary-line"><span>{t.subtotal}</span><span>¥{subtotal.toFixed(2)}</span></div><div className="summary-line discount"><span>{t.couponBannerTitle}</span><span>−¥{(subtotal - total).toFixed(2)}</span></div></div>}<div className="summary-total"><span>{t.total}</span><strong>¥{total.toFixed(2)}</strong></div>{error && <div className="inline-error">{error}</div>}<button className="button button-dark full" disabled={submitting}>{submitting ? <><LoaderCircle className="spin" />{t.placing}</> : <>{t.placeOrder}<ArrowRight size={17} /></>}</button><small className="secure-note"><LockKeyhole size={13} /> {t.secureCheckout}</small></aside>
     </form>
     <PaymentModal open={showPayment} onClose={() => setShowPayment(false)} onSuccess={handlePaid} amount={total} t={t} />
   </div></section>
@@ -694,8 +703,8 @@ function AccountPage({ t, customerId, setCustomerId, auth, refreshAuth }: { t: a
   return <section className="page-section account-page"><div className="container">
     <div className="account-heading"><PageTitle eyebrow="WHALE MEMBER" title={t.accountTitle} subtitle={t.accountSub} />{auth?.authenticated && <button className="text-button" onClick={async () => { await api.logout(); setCustomerId(null); await refreshAuth() }}>{t.logout}</button>}</div>
     {!auth?.authenticated ? <>{auth === null ? <div className="login-unconfigured"><LoaderCircle className="spin" /> Loading…</div> : <><p className="staff-login-hint"><ShieldCheck size={16} />{t.loginRequired}</p><LoginPage t={t} onDone={refreshAuth} /></>}</> : loading ? <LoadingBlock text={t.brewing} /> : !customer ? <LoadingBlock text={t.brewing} /> : <><div className="account-grid">
-      <aside className="profile-card"><div className="large-avatar">{customer.first_name[0]}{customer.last_name[0]}<span><BadgeCheck /></span></div><h2>{customer.first_name} {customer.last_name}</h2><p>{customer.email}</p><div className="profile-stat"><span><Wallet />{t.balance}</span><strong>¥{Number(customer.balance).toFixed(2)}</strong></div><div className="profile-stat"><span><Sparkles />{t.loyalty}</span><strong>{customer.loyalty_points}</strong></div><div className="profile-stat"><span><Clock3 />{t.memberSince}</span><strong>{new Date(customer.join_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</strong></div><div className="profile-stat"><span><Banknote />{t.tabTotal ?? 'Tab total'}</span><strong className={auth.credit?.locked ? 'locked-amount' : ''}>${Number(auth.credit?.outstanding_amount ?? 0).toFixed(2)}</strong></div>{auth.credit?.locked && <div className="profile-lock-hint"><LockKeyhole size={14} />{t.tabLocked ?? 'Locked: tab over $100'}</div>}{auth.credit?.outstanding_amount ? <button className="button button-dark profile-settle-btn" disabled={settlingAll} onClick={handleSettleAll}>{settlingAll ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <><Banknote />{t.settleAll}</>}</button> : null}</aside>
-      <div className="account-content">{auth.credit?.locked && <LockBanner t={t} credit={auth.credit} settleAll={handleSettleAll} settling={settlingAll} />}<section className="account-panel"><div className="panel-heading"><div><span className="eyebrow">HISTORY</span><h2>{t.activity}</h2></div><Coffee /></div>{orders.length === 0 ? <div className="activity-empty"><Coffee /><p>{t.noActivity}</p></div> : <div className="activity-list">{orders.map(order => <article className="activity-row" key={order.order_id}><div className="activity-icon"><ShoppingBag /></div><div className="activity-copy"><div><strong>{t.orderNumber} #{order.order_id}</strong><StatusPill status={order.payment_status} t={t} />{order.pickup_code && <span className="pickup-chip">{t.pickupCode ?? 'Pickup'} · {order.pickup_code}</span>}</div><p>{order.items.map(item => `${item.quantity}× ${item.product.product_name}`).join(' · ')}</p><small>{new Date(order.order_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}{order.credit_due_at && ` · ${t.due}: ${new Date(order.credit_due_at).toLocaleDateString()}`}</small></div><div className="activity-price"><strong>${Number(order.total_amount).toFixed(2)}</strong>{order.payment_status === 'pending' && order.credit_due_at && <button disabled={settling === order.order_id} onClick={async () => { setSettling(order.order_id); await api.payOrder(order.order_id); await refreshAuth(); const history = await api.customerOrders(customer.customer_id); setOrders(history); setSettling(null) }}>{settling === order.order_id ? t.settling : t.settleNow}</button>}</div></article>)}</div>}</section>
+      <aside className="profile-card"><div className="large-avatar">{customer.first_name[0]}{customer.last_name[0]}<span><BadgeCheck /></span></div><h2>{customer.first_name} {customer.last_name}</h2><p>{customer.email}</p><div className="profile-stat"><span><Wallet />{t.balance}</span><strong>¥{Number(customer.balance).toFixed(2)}</strong></div><div className="profile-stat"><span><Sparkles />{t.loyalty}</span><strong>{customer.loyalty_points}</strong></div><div className="profile-stat"><span><Clock3 />{t.memberSince}</span><strong>{new Date(customer.join_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</strong></div><div className="profile-stat"><span><Banknote />{t.tabTotal ?? 'Tab total'}</span><strong className={auth.credit?.locked ? 'locked-amount' : ''}>¥{Number(auth.credit?.outstanding_amount ?? 0).toFixed(2)}</strong></div>{auth.credit?.locked && <div className="profile-lock-hint"><LockKeyhole size={14} />{t.tabLocked ?? 'Locked: tab over ¥100'}</div>}{auth.credit?.outstanding_amount ? <button className="button button-dark profile-settle-btn" disabled={settlingAll} onClick={handleSettleAll}>{settlingAll ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <><Banknote />{t.settleAll}</>}</button> : null}</aside>
+      <div className="account-content">{auth.credit?.locked && <LockBanner t={t} credit={auth.credit} settleAll={handleSettleAll} settling={settlingAll} />}<section className="account-panel"><div className="panel-heading"><div><span className="eyebrow">HISTORY</span><h2>{t.activity}</h2></div><Coffee /></div>{orders.length === 0 ? <div className="activity-empty"><Coffee /><p>{t.noActivity}</p></div> : <div className="activity-list">{orders.map(order => <article className="activity-row" key={order.order_id}><div className="activity-icon"><ShoppingBag /></div><div className="activity-copy"><div><strong>{t.orderNumber} #{order.order_id}</strong><StatusPill status={order.payment_status} t={t} />{order.pickup_code && <span className="pickup-chip">{t.pickupCode ?? 'Pickup'} · {order.pickup_code}</span>}</div><p>{order.items.map(item => `${item.quantity}× ${item.product.product_name}`).join(' · ')}</p><small>{new Date(order.order_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}{order.credit_due_at && ` · ${t.due}: ${new Date(order.credit_due_at).toLocaleDateString()}`}</small></div><div className="activity-price"><strong>¥{Number(order.total_amount).toFixed(2)}</strong>{order.payment_status === 'pending' && order.credit_due_at && <button disabled={settling === order.order_id} onClick={async () => { setSettling(order.order_id); await api.payOrder(order.order_id); await refreshAuth(); const history = await api.customerOrders(customer.customer_id); setOrders(history); setSettling(null) }}>{settling === order.order_id ? t.settling : t.settleNow}</button>}</div></article>)}</div>}</section>
         <section className="account-panel wallet-panel"><div className="panel-heading"><div><span className="eyebrow">WALLET</span><h2>{t.balance}</h2><p>{t.balanceSub}</p></div><Wallet /></div><div className="wallet-balance"><strong>¥{Number(wallet?.balance ?? customer.balance ?? 0).toFixed(2)}</strong><small>{t.topUpMax} ¥{Number(wallet?.max_balance ?? 0).toFixed(2)}</small></div><div className="wallet-presets">{[20, 50, 100, 200].map(value => <button key={value} type="button" onClick={() => setTopUpAmount(String(value))}>¥{value}</button>)}</div><div className="wallet-topup"><label><span>{t.topUpAmount}</span><input type="number" min="0" step="0.01" value={topUpAmount} onChange={event => setTopUpAmount(event.target.value)} /></label><button type="button" className="button button-dark" disabled={topUpBusy} onClick={handleTopUp}>{topUpBusy ? <LoaderCircle className="spin" size={15} /> : <><Plus size={15} />{t.topUpSubmit}</>}</button></div><small className="wallet-note">{t.topUpMin} ¥{Number(wallet?.recharge_minimum ?? 0).toFixed(2)}{walletMsg ? ` · ${walletMsg}` : ''}</small><div className="wallet-transactions">{!wallet || wallet.transactions.length === 0 ? <p className="muted">{t.noTransactions}</p> : wallet.transactions.map((tx: BalanceTransaction) => <div className="wallet-row" key={tx.balance_transaction_id}><div><strong>{tx.kind}{tx.order_id ? ` #${tx.order_id}` : ''}</strong><small>{new Date(tx.created_at).toLocaleString()}{tx.note ? ` · ${tx.note}` : ''}</small></div><strong className={Number(tx.amount) >= 0 ? 'positive' : 'negative'}>{Number(tx.amount) >= 0 ? '+' : ''}¥{Number(tx.amount).toFixed(2)}</strong></div>)}</div></section>
         <section className="account-panel privacy-panel"><div className="panel-heading"><div><span className="eyebrow">CONTROL</span><h2>{t.privacy}</h2><p>{t.privacySub}</p></div><ShieldCheck /></div><PrivacyToggle icon={<Sparkles />} title={t.recommendations} text={t.recommendationsSub} checked={privacy.recommendations} onChange={checked => setPrivacy({ ...privacy, recommendations: checked })} /><PrivacyToggle icon={<Bell />} title={t.marketing} text={t.marketingSub} checked={privacy.marketing} onChange={checked => setPrivacy({ ...privacy, marketing: checked })} /><PrivacyToggle icon={<Eye />} title={t.profileVisibility} text={t.profileVisibilitySub} checked={privacy.publicProfile} onChange={checked => setPrivacy({ ...privacy, publicProfile: checked })} /><button className="button button-dark save-privacy" onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 1800) }}>{saved ? <><Check />{t.saved}</> : t.save}</button></section>
       </div>
@@ -717,7 +726,7 @@ function LoginRoute({ t, onDone }: { t: any; onDone: () => Promise<void> }) {
 function StoreBanner({ t, store }: { t: any; store: StoreStatus }) {
   return <div className={store.open ? 'store-banner' : 'store-banner closed'}><div className="container"><span><Clock3 size={15} /></span><div><strong>{store.open ? t.storeOpenNow : t.storeClosed}</strong><p>{t.storeHours}: {store.settings.open_time}–{store.settings.close_time}{store.settings.announcement ? ` · ${store.settings.announcement}` : ''}</p></div></div></div>
 }
-function LockBanner({ t, credit, settleAll, settling }: { t: any; credit?: CreditStatus | null; settleAll?: () => Promise<void>; settling?: boolean }) { return <div className="lock-banner"><span><LockKeyhole /></span><div><strong>{t.accountLocked}</strong><p>{t.accountLockedSub}</p></div>{credit && <div className="lock-amount"><small>{t.overdueBalance}</small><strong>${Number(credit.outstanding_amount).toFixed(2)}</strong></div>}{settleAll ? <button className="button button-dark" disabled={settling} onClick={settleAll}>{settling ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <>{t.settleAll}<ArrowRight /></>}</button> : <Link to="/account">{t.settleNow}<ArrowRight /></Link>}</div> }
+function LockBanner({ t, credit, settleAll, settling }: { t: any; credit?: CreditStatus | null; settleAll?: () => Promise<void>; settling?: boolean }) { return <div className="lock-banner"><span><LockKeyhole /></span><div><strong>{t.accountLocked}</strong><p>{t.accountLockedSub}</p></div>{credit && <div className="lock-amount"><small>{t.overdueBalance}</small><strong>¥{Number(credit.outstanding_amount).toFixed(2)}</strong></div>}{settleAll ? <button className="button button-dark" disabled={settling} onClick={settleAll}>{settling ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <>{t.settleAll}<ArrowRight /></>}</button> : <Link to="/account">{t.settleNow}<ArrowRight /></Link>}</div> }
 
 function SettlePage({ t, customer, customerId, auth, refreshAuth }: { t: any; customer: Customer | null; customerId: number | null; auth: AuthStatus | null; refreshAuth: () => Promise<void> }) {
   const [orders, setOrders] = useState<Order[]>([])
@@ -768,7 +777,7 @@ function SettlePage({ t, customer, customerId, auth, refreshAuth }: { t: any; cu
   <div className="settle-layout">
     <section className="settle-panel">
       <div className="settle-summary">
-        <div className="settle-summary-row"><span>{t.settleOutstanding ?? 'Outstanding balance'}</span><strong className={locked ? 'locked-amount' : ''}>${outstanding.toFixed(2)}</strong></div>
+        <div className="settle-summary-row"><span>{t.settleOutstanding ?? 'Outstanding balance'}</span><strong className={locked ? 'locked-amount' : ''}>¥{outstanding.toFixed(2)}</strong></div>
         <div className="settle-summary-row muted"><span>{t.settlePendingCount ?? 'Pending orders'}</span><strong>{pending.length}</strong></div>
         {auth?.credit?.overdue_orders?.length ? <div className="settle-summary-row muted"><span><Clock3 size={14} />{t.settleOverdue ?? 'Overdue'}</span><strong className="locked-amount">{auth.credit.overdue_orders.length}</strong></div> : null}
       </div>
@@ -780,14 +789,14 @@ function SettlePage({ t, customer, customerId, auth, refreshAuth }: { t: any; cu
               <strong>#{o.order_id} · {o.items.reduce((s, it) => s + it.quantity, 0)} {t.items}</strong>
               <small>{new Date(o.order_date).toLocaleDateString()}{o.items.length > 0 && ` · ${o.items.map(i => i.product.product_name).join(', ')}`}</small>
             </div>
-            <strong className="settle-row-price">${Number(o.total_amount).toFixed(2)}</strong>
+            <strong className="settle-row-price">¥{Number(o.total_amount).toFixed(2)}</strong>
             <button className="button button-dark button-mini" disabled={settlingOne === o.order_id} onClick={() => settleOne(o.order_id)}>{settlingOne === o.order_id ? <LoaderCircle className="spin" /> : t.settleOne ?? 'Settle'}</button>
           </div>
         ))}
       </div>}
     </section>
     <aside className="settle-total-card">
-      <div className="settle-total-amount"><span>{t.settleTotalLabel ?? 'Total to pay'}</span><strong>${outstanding.toFixed(2)}</strong></div>
+      <div className="settle-total-amount"><span>{t.settleTotalLabel ?? 'Total to pay'}</span><strong>¥{outstanding.toFixed(2)}</strong></div>
       <button className="button button-dark settle-all-btn" disabled={settlingAll || pending.length === 0} onClick={settleAll}>
         {settlingAll ? <><LoaderCircle className="spin" />{t.settlingAll}</> : <><Banknote />{t.settleAll}</>}
       </button>
@@ -802,7 +811,7 @@ function AdminPage({ t }: { t: any }) {
   const [loginUser, setLoginUser] = useState('')
   const [loginPass, setLoginPass] = useState('')
   const [loginErr, setLoginErr] = useState('')
-  const [tab, setTab] = useState<'orders' | 'products' | 'market'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'market' | 'customers' | 'settings' | 'logs'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -810,8 +819,13 @@ function AdminPage({ t }: { t: any }) {
   const [loading, setLoading] = useState(true)
   const [orderBusy, setOrderBusy] = useState<number | null>(null)
   const [productBusy, setProductBusy] = useState<number | null>(null)
-  const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '', image_url: '' })
+  const [newProduct, setNewProduct] = useState({ product_name: '', description: '', price: '', stock_quantity: '', category_id: '', image_url: '' })
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [newProductSizes, setNewProductSizes] = useState({
+    regularPrice: '',
+    bigPrice: '',
+    temps: { Iced: true, Hot: true, Warm: false } as Record<string, boolean>
+  })
   const [creating, setCreating] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
 
@@ -902,7 +916,7 @@ function AdminPage({ t }: { t: any }) {
     if (!newProduct.product_name || !newProduct.price || !newProduct.category_id) return
     setCreating(true)
     try {
-      await api.createProduct({
+      const created = await api.createProduct({
         product_name: newProduct.product_name,
         description: newProduct.description || null,
         price: newProduct.price,
@@ -910,7 +924,22 @@ function AdminPage({ t }: { t: any }) {
         image_url: newProduct.image_url || null,
         category_id: Number(newProduct.category_id)
       })
-      setNewProduct({ product_name: '', description: '', price: '', stock_quantity: '0', category_id: '', image_url: '' })
+      const base = Number(newProduct.price)
+      const regular = newProductSizes.regularPrice ? Number(newProductSizes.regularPrice) : base
+      const big = newProductSizes.bigPrice ? Number(newProductSizes.bigPrice) : base + 1
+      let order = 0
+      for (const preset of [
+        { name: 'Regular', price_delta: (regular - base).toFixed(2) },
+        { name: 'Big', price_delta: (big - base).toFixed(2) }
+      ]) {
+        await api.createVariant(created.product_id, { ...preset, group_name: 'Size', stock_quantity: null, sort_order: order++ })
+      }
+      for (const [name, enabled] of Object.entries(newProductSizes.temps)) {
+        if (!enabled) continue
+        await api.createVariant(created.product_id, { name, group_name: 'Temperature', price_delta: '0.00', stock_quantity: null, sort_order: order++ })
+      }
+      setNewProduct({ product_name: '', description: '', price: '', stock_quantity: '', category_id: '', image_url: '' })
+      setNewProductSizes({ regularPrice: '', bigPrice: '', temps: { Iced: true, Hot: true, Warm: false } })
       await refreshProducts()
     } finally { setCreating(false) }
   }
@@ -947,7 +976,7 @@ function AdminPage({ t }: { t: any }) {
 
         <div className="admin-stats">
           <div className="admin-stat"><strong>{orders.length}</strong><span>{t.adminOrdersCount ?? 'orders'}</span></div>
-          <div className="admin-stat"><strong>${totalRevenue.toFixed(2)}</strong><span>{t.adminRevenue ?? 'Revenue'}</span></div>
+          <div className="admin-stat"><strong>¥{totalRevenue.toFixed(2)}</strong><span>{t.adminRevenue ?? 'Revenue'}</span></div>
           <div className="admin-stat"><strong>{pendingCount}</strong><span>{t.adminOpenTab ?? 'Open tabs'}</span></div>
           <div className="admin-stat low-stock"><strong>{lowStock}</strong><span>{t.adminLowStock ?? 'Low stock'}</span></div>
         </div>
@@ -956,6 +985,9 @@ function AdminPage({ t }: { t: any }) {
           <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>{t.adminOrders}</button>
           <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>{t.adminProducts}</button>
           <button className={tab === 'market' ? 'active' : ''} onClick={() => setTab('market')}>{t.marketNav}</button>
+          <button className={tab === 'customers' ? 'active' : ''} onClick={() => setTab('customers')}>{t.staffUsers}</button>
+          <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>{t.staffSettings}</button>
+          <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>{t.staffLogs}</button>
         </div>
 
         {loading ? <div className="settle-empty-mini"><LoaderCircle className="spin" /></div> :
@@ -995,7 +1027,7 @@ function AdminPage({ t }: { t: any }) {
                       </td>
                       <td>{o.customer_name ?? `#${o.customer_id}`}</td>
                       <td>{o.items.reduce((s, it) => s + it.quantity, 0)} · {o.items.map(i => i.product.product_name).join(', ')}</td>
-                      <td className="num"><strong>${Number(o.total_amount).toFixed(2)}</strong></td>
+                      <td className="num"><strong>¥{Number(o.total_amount).toFixed(2)}</strong></td>
                       <td>{methodBadge(o.payment_method)}</td>
                       <td>{statusBadge(o.payment_status)}</td>
                       <td>
@@ -1021,13 +1053,37 @@ function AdminPage({ t }: { t: any }) {
               <div className="admin-form-row">
                 <input value={newProduct.product_name} onChange={e => setNewProduct({ ...newProduct, product_name: e.target.value })} placeholder={t.adminProductName ?? 'Name'} required />
                 <input type="number" step="0.01" min="0" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder={t.adminProductPrice ?? 'Price'} required />
-                <input type="number" min="0" value={newProduct.stock_quantity} onChange={e => setNewProduct({ ...newProduct, stock_quantity: e.target.value })} placeholder={t.adminProductStock ?? 'Stock'} />
+                <input type="number" min="0" value={newProduct.stock_quantity} onChange={e => setNewProduct({ ...newProduct, stock_quantity: e.target.value })} placeholder={t.adminProductQuantity ?? 'Quantity'} />
                 <select value={newProduct.category_id} onChange={e => setNewProduct({ ...newProduct, category_id: e.target.value })} required>
                   <option value="">{t.adminProductCategory ?? 'Category'}</option>
                   {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
                 </select>
               </div>
               <input value={newProduct.description} onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} placeholder={t.adminProductDesc ?? 'Description'} />
+              <div className="admin-size-presets">
+                <span className="admin-image-label">{t.adminSizes ?? 'Sizes'}</span>
+                <div className="admin-size-row">
+                  <label className="admin-size-price">
+                    <span>Regular</span>
+                    <input type="number" step="0.01" min="0" value={newProductSizes.regularPrice} onChange={e => setNewProductSizes({ ...newProductSizes, regularPrice: e.target.value })} placeholder={newProduct.price || 'Price'} />
+                  </label>
+                  <label className="admin-size-price">
+                    <span>Big</span>
+                    <input type="number" step="0.01" min="0" value={newProductSizes.bigPrice} onChange={e => setNewProductSizes({ ...newProductSizes, bigPrice: e.target.value })} placeholder={newProduct.price || 'Price'} />
+                  </label>
+                </div>
+                <small className="admin-image-hint">{t.adminSizePriceHint ?? 'Set the price customers pay for each size. Blank uses the price above (Big adds ¥1.00).'}</small>
+              </div>
+              <div className="admin-size-presets">
+                <span className="admin-image-label">{t.temperature ?? 'Temperature'}</span>
+                <div className="admin-temp-options">
+                  {Object.keys(newProductSizes.temps).map(name => <label key={name} className="admin-temp-option">
+                    <input type="checkbox" checked={newProductSizes.temps[name]} onChange={e => setNewProductSizes({ ...newProductSizes, temps: { ...newProductSizes.temps, [name]: e.target.checked } })} />
+                    {name}
+                  </label>)}
+                </div>
+                <small className="admin-image-hint">{t.adminTempHint ?? 'Temperatures customers can choose on the product page.'}</small>
+              </div>
               <div className="admin-image-field">
                 <label className="admin-image-label">{t.adminProductImage}</label>
                 <small className="admin-image-hint">{t.adminProductImageHint}</small>
@@ -1077,11 +1133,11 @@ function AdminPage({ t }: { t: any }) {
                         <td>{catName}</td>
                         <td className="admin-sizes">
                           {p.variants.length > 0
-                            ? p.variants.map(v => <span className="admin-size-chip" key={v.variant_id}>{v.name}{Number(v.price_delta) !== 0 && <small>{Number(v.price_delta) > 0 ? '+' : '−'}${Math.abs(Number(v.price_delta)).toFixed(2)}</small>}</span>)
+                            ? p.variants.map(v => <span className="admin-size-chip" key={v.variant_id}>{v.name}{Number(v.price_delta) !== 0 && <small>{Number(v.price_delta) > 0 ? '+' : '−'}¥{Math.abs(Number(v.price_delta)).toFixed(2)}</small>}</span>)
                             : <small className="admin-no-sizes">{t.adminNoSizes ?? 'None'}</small>}
                           <button className="admin-sizes-edit" onClick={() => setEditingProduct(editingProduct?.product_id === p.product_id ? null : p)}>{t.adminEditSizes ?? 'Edit sizes'}</button>
                         </td>
-                        <td className="num"><strong>${Number(p.price).toFixed(2)}</strong></td>
+                        <td className="num"><strong>¥{Number(p.price).toFixed(2)}</strong></td>
                         <td className="num">
                           <span className={p.stock_quantity === 0 ? 'badge-out' : p.stock_quantity < 10 ? 'badge-low' : 'badge-ok'}>{p.stock_quantity}</span>
                         </td>
@@ -1105,6 +1161,12 @@ function AdminPage({ t }: { t: any }) {
               </table>
             </div>
           </section>
+        ) : tab === 'customers' ? (
+          <UsersTab t={t} canManage />
+        ) : tab === 'settings' ? (
+          <SettingsTab t={t} />
+        ) : tab === 'logs' ? (
+          <LogsTab t={t} />
         ) : (
           <MarketPage t={t} />
         )}
@@ -1125,7 +1187,7 @@ function ProductEditor({ product, categories, t, onClose, onSaved }: {
     image_url: product.image_url ?? ''
   })
   const [variants, setVariants] = useState<ProductVariant[]>(product.variants ?? [])
-  const [draft, setDraft] = useState({ name: '', price_delta: '0.00', stock_quantity: '' })
+  const [draft, setDraft] = useState({ name: '', group_name: 'Size', price_delta: '0.00', stock_quantity: '' })
   const [saving, setSaving] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [error, setError] = useState('')
@@ -1171,12 +1233,13 @@ function ProductEditor({ product, categories, t, onClose, onSaved }: {
     try {
       const created = await api.createVariant(product.product_id, {
         name: draft.name.trim(),
+        group_name: draft.group_name,
         price_delta: draft.price_delta || '0.00',
         stock_quantity: draft.stock_quantity === '' ? null : Number(draft.stock_quantity),
         sort_order: variants.length
       })
       setVariants(current => [...current, created])
-      setDraft({ name: '', price_delta: '0.00', stock_quantity: '' })
+      setDraft({ name: '', group_name: draft.group_name, price_delta: '0.00', stock_quantity: '' })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : t.apiOffline)
@@ -1188,6 +1251,7 @@ function ProductEditor({ product, categories, t, onClose, onSaved }: {
     try {
       const updated = await api.updateVariant(product.product_id, variant.variant_id, {
         name: variant.name,
+        group_name: variant.group_name,
         price_delta: variant.price_delta,
         stock_quantity: variant.stock_quantity,
         sort_order: variant.sort_order
@@ -1242,6 +1306,10 @@ function ProductEditor({ product, categories, t, onClose, onSaved }: {
       <h3>{t.adminVariants ?? 'Sizes / options'}</h3>
       <small className="admin-image-hint">{t.adminVariantHint ?? 'Leave stock blank to share the product stock. Price adjust is added to the base price.'}</small>
       {variants.map(variant => <div className="variant-editor-row" key={variant.variant_id}>
+        <select value={variant.group_name} onChange={e => patchVariant(variant.variant_id, { group_name: e.target.value })} aria-label={t.adminVariantGroup ?? 'Group'}>
+          <option value="Size">{t.size}</option>
+          <option value="Temperature">{t.temperature}</option>
+        </select>
         <input value={variant.name} onChange={e => patchVariant(variant.variant_id, { name: e.target.value })} placeholder={t.adminVariantName ?? 'Option'} />
         <input type="number" step="0.01" value={variant.price_delta} onChange={e => patchVariant(variant.variant_id, { price_delta: e.target.value })} placeholder={t.adminVariantDelta ?? 'Price ±'} />
         <input type="number" min="0" value={variant.stock_quantity ?? ''} onChange={e => patchVariant(variant.variant_id, { stock_quantity: e.target.value === '' ? null : Number(e.target.value) })} placeholder={t.adminVariantInherit ?? 'Shared stock'} />
@@ -1249,6 +1317,10 @@ function ProductEditor({ product, categories, t, onClose, onSaved }: {
         <button type="button" className="button button-danger button-mini" disabled={saving} onClick={() => removeVariant(variant.variant_id)}><Trash2 size={14} /></button>
       </div>)}
       <div className="variant-editor-row is-new">
+        <select value={draft.group_name} onChange={e => setDraft({ ...draft, group_name: e.target.value })} aria-label={t.adminVariantGroup ?? 'Group'}>
+          <option value="Size">{t.size}</option>
+          <option value="Temperature">{t.temperature}</option>
+        </select>
         <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder={t.adminVariantName ?? 'Option'} />
         <input type="number" step="0.01" value={draft.price_delta} onChange={e => setDraft({ ...draft, price_delta: e.target.value })} placeholder={t.adminVariantDelta ?? 'Price ±'} />
         <input type="number" min="0" value={draft.stock_quantity} onChange={e => setDraft({ ...draft, stock_quantity: e.target.value })} placeholder={t.adminVariantInherit ?? 'Shared stock'} />
@@ -1301,7 +1373,7 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
           <span className="eyebrow">PAYMENT</span>
           <h2>{t.payNowTitle}</h2>
           <p>{t.paymentMethodSub}</p>
-          <div className="payment-amount"><span>{t.payAmount}</span><strong>${amount.toFixed(2)}</strong></div>
+          <div className="payment-amount"><span>{t.payAmount}</span><strong>¥{amount.toFixed(2)}</strong></div>
         </div>
 
         <div className="payment-methods">
@@ -1319,7 +1391,7 @@ function PaymentModal({ open, onClose, onSuccess, amount, t }: { open: boolean; 
         {method === 'cash' && <div className="payment-cash-confirm">
           <button type="button" className="cash-amount-btn" onClick={handleCashConfirm}>
             <small>{t.tapToConfirm ?? 'Tap to confirm received'}</small>
-            <strong>${amount.toFixed(2)}</strong>
+            <strong>¥{amount.toFixed(2)}</strong>
             <Banknote size={28} />
           </button>
           <button type="button" className="text-button" onClick={() => onClose()}><ArrowLeft size={14} />{t.backToMenu}</button>
@@ -1500,7 +1572,7 @@ function PaymentPage({ t }: { t: any }) {
         <div className="payment-page-card">
           <div className="payment-page-summary">
             <div className="payment-page-row"><span>{t.paymentPageOrderLabel}</span><strong>#{orderId}</strong></div>
-            <div className="payment-page-row"><span>{t.paymentPageAmount}</span><strong>${amount.toFixed(2)}</strong></div>
+            <div className="payment-page-row"><span>{t.paymentPageAmount}</span><strong>¥{amount.toFixed(2)}</strong></div>
             <div className="payment-page-row"><span>{t.paymentPageExpiresIn}</span><strong>{minutesLeft} {t.paymentPageMinutes}</strong></div>
           </div>
           <div className="payment-qr">
@@ -1561,7 +1633,7 @@ function MarketPage({ t }: { t: any }) {
     return () => window.clearInterval(id)
   }, [load])
 
-  const fmtMoney = (n: string | number) => `$${Number(n).toFixed(2)}`
+  const fmtMoney = (n: string | number) => `¥${Number(n).toFixed(2)}`
   const fmtDate = (s: string | null) => {
     if (!s) return t.marketNever
     const d = new Date(s)
@@ -1711,7 +1783,7 @@ function ProductMarketPage({ t, productId }: { t: any; productId: number }) {
     return () => window.clearInterval(id)
   }, [load, adminAuthed])
 
-  const fmtMoney = (n: string | number) => `$${Number(n).toFixed(2)}`
+  const fmtMoney = (n: string | number) => `¥${Number(n).toFixed(2)}`
   const fmtDateTime = (s: string | null) => {
     if (!s) return t.marketNever
     const d = new Date(s)
@@ -1918,7 +1990,7 @@ function niceCeil(n: number): number {
 }
 
 function formatAxis(v: number, metric: string): string {
-  if (metric === 'revenue') return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`
+  if (metric === 'revenue') return v >= 1000 ? `¥${(v / 1000).toFixed(1)}k` : `¥${v.toFixed(0)}`
   return String(Math.round(v))
 }
 
@@ -1983,12 +2055,14 @@ function Value({ icon, title, text }: { icon: React.ReactNode; title: string; te
 function StatusPill({ status, t }: { status: Order['payment_status']; t: any }) { return <span className={`status-pill ${status}`}>{t[status]}</span> }
 function PrivacyToggle({ icon, title, text, checked, onChange }: { icon: React.ReactNode; title: string; text: string; checked: boolean; onChange: (checked: boolean) => void }) { return <label className="privacy-row"><span className="privacy-icon">{icon}</span><span><strong>{title}</strong><small>{text}</small></span><input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} /><i /></label> }
 function categoryName(name: string, t: any) { const key = name.toLowerCase(); return t[key] ?? name }
-// Cart lines are unique per product + variant, so both must be part of the key.
-function lineKey(item: { product_id: number; variant_id?: number }) {
-  return `${item.product_id}:${item.variant_id ?? 0}`
+// Cart lines are unique per product + size + temperature, so all three are in the key.
+function lineKey(item: { product_id: number; variant_id?: number; temperature_variant_id?: number }) {
+  return `${item.product_id}:${item.variant_id ?? 0}:${item.temperature_variant_id ?? 0}`
 }
-function variantPrice(product: Product, variant?: ProductVariant | null) {
-  return Number(product.price) + (variant ? Number(variant.price_delta) : 0)
+function variantPrice(product: Product, variant?: ProductVariant | null, temperature?: ProductVariant | null) {
+  return Number(product.price)
+    + (variant ? Number(variant.price_delta) : 0)
+    + (temperature ? Number(temperature.price_delta) : 0)
 }
 function variantStock(product: Product, variant?: ProductVariant | null) {
   return variant?.stock_quantity ?? product.stock_quantity
@@ -2001,32 +2075,39 @@ function availableStock(product: Product, cart: CartItem[], variant?: ProductVar
   return Math.max(0, variantStock(product, variant) - reserved)
 }
 
-function VariantChips({ product, selected, onSelect }: { product: Product; selected: number | null; onSelect: (id: number) => void }) {
-  if (!product.variants?.length) return null
-  return <div className="variant-chips">
-    {product.variants.map(variant => {
-      const delta = Number(variant.price_delta)
-      return <button
-        type="button"
-        key={variant.variant_id}
-        className={selected === variant.variant_id ? 'variant-chip active' : 'variant-chip'}
-        onClick={() => onSelect(variant.variant_id)}
-      >
-        {variant.name}
-        {delta !== 0 && <small>{delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2)}</small>}
-      </button>
-    })}
+function OptionTabs({ variants, selected, onSelect, label }: { variants: ProductVariant[]; selected: number | null; onSelect: (id: number) => void; label: string }) {
+  if (!variants.length) return null
+  return <div className="variant-picker">
+    <span className="variant-label">{label}</span>
+    <div className="filter-tabs size-tabs">
+      {variants.map(variant => {
+        const delta = Number(variant.price_delta)
+        return <button
+          type="button"
+          key={variant.variant_id}
+          className={selected === variant.variant_id ? 'active' : ''}
+          onClick={() => onSelect(variant.variant_id)}
+        >
+          {variant.name}
+          {delta !== 0 && <small>{delta > 0 ? '+' : '−'}¥{Math.abs(delta).toFixed(2)}</small>}
+        </button>
+      })}
+    </div>
   </div>
 }
 
 function HomeProductCard({ product, index, t, cart, locked, addToCart, categoryLabel }: {
   product: Product; index: number; t: any; cart: CartItem[]; locked: boolean
-  addToCart: (product: Product, variant?: ProductVariant | null) => void; categoryLabel: string
+  addToCart: (product: Product, variant?: ProductVariant | null, temperature?: ProductVariant | null) => void; categoryLabel: string
 }) {
-  const [variantId, setVariantId] = useState<number | null>(product.variants?.[0]?.variant_id ?? null)
-  const variant = product.variants?.find(v => v.variant_id === variantId) ?? null
+  const sizeVariants = product.variants?.filter(v => v.group_name !== 'Temperature') ?? []
+  const tempVariants = product.variants?.filter(v => v.group_name === 'Temperature') ?? []
+  const [variantId, setVariantId] = useState<number | null>(sizeVariants[0]?.variant_id ?? null)
+  const [temperatureId, setTemperatureId] = useState<number | null>(tempVariants[0]?.variant_id ?? null)
+  const variant = sizeVariants.find(v => v.variant_id === variantId) ?? null
+  const temperature = tempVariants.find(v => v.variant_id === temperatureId) ?? null
   const available = availableStock(product, cart, variant)
-  const price = variantPrice(product, variant)
+  const price = variantPrice(product, variant, temperature)
 
   return <article className="product-card" style={{ '--delay': `${index * 55}ms` } as React.CSSProperties}>
     <div className="product-image-wrap">
@@ -2037,34 +2118,40 @@ function HomeProductCard({ product, index, t, cart, locked, addToCart, categoryL
     <div className="product-info">
       <div><span className="product-kind">{categoryLabel}</span><h3>{product.product_name}</h3></div>
       <p>{product.description}</p>
-      <VariantChips product={product} selected={variantId} onSelect={setVariantId} />
-      <div className="product-bottom"><strong>${price.toFixed(2)}</strong><button disabled={available === 0 || locked} onClick={() => addToCart(product, variant)}>{available === 0 ? t.soldOut : <><Plus size={16} /> {t.add}</>}</button></div>
+      <OptionTabs variants={sizeVariants} selected={variantId} onSelect={setVariantId} label={t.size} />
+      <OptionTabs variants={tempVariants} selected={temperatureId} onSelect={setTemperatureId} label={t.temperature} />
+      <div className="product-bottom"><strong>¥{price.toFixed(2)}</strong><button disabled={available === 0 || locked} onClick={() => addToCart(product, variant, temperature)}>{available === 0 ? t.soldOut : <><Plus size={16} /> {t.add}</>}</button></div>
     </div>
   </article>
 }
 
 function CatalogCard({ item, index, t, cart, locked, addToCart, discountPercent, categoryLabel }: {
   item: Product; index: number; t: any; cart: CartItem[]; locked: boolean
-  addToCart: (product: Product, variant?: ProductVariant | null) => void; discountPercent: number; categoryLabel: string
+  addToCart: (product: Product, variant?: ProductVariant | null, temperature?: ProductVariant | null) => void; discountPercent: number; categoryLabel: string
 }) {
-  const [variantId, setVariantId] = useState<number | null>(item.variants?.[0]?.variant_id ?? null)
-  const variant = item.variants?.find(v => v.variant_id === variantId) ?? null
+  const sizeVariants = item.variants?.filter(v => v.group_name !== 'Temperature') ?? []
+  const tempVariants = item.variants?.filter(v => v.group_name === 'Temperature') ?? []
+  const [variantId, setVariantId] = useState<number | null>(sizeVariants[0]?.variant_id ?? null)
+  const [temperatureId, setTemperatureId] = useState<number | null>(tempVariants[0]?.variant_id ?? null)
+  const variant = sizeVariants.find(v => v.variant_id === variantId) ?? null
+  const temperature = tempVariants.find(v => v.variant_id === temperatureId) ?? null
   const available = availableStock(item, cart, variant)
   const reserved = cart
     .filter(line => line.product_id === item.product_id && (line.variant_id ?? null) === (variant?.variant_id ?? null))
     .reduce((sum, line) => sum + line.quantity, 0)
   const soldOut = available === 0
-  const original = variantPrice(item, variant)
+  const original = variantPrice(item, variant, temperature)
   const finalPrice = discountPercent > 0 ? discountedPrice(original, discountPercent) : original
 
   return <article className={soldOut ? 'catalog-card is-sold-out' : 'catalog-card'} style={{ '--delay': `${index * 45}ms` } as React.CSSProperties}>
     <div className="catalog-image"><img src={item.image_url ?? productArt[item.product_name] ?? fallbackArt} alt={item.product_name} />{soldOut && <div className="sold-out-overlay"><span>{t.soldOut}</span><small>{t.soldOutNote}</small></div>}<span className="catalog-category">{categoryLabel}</span></div>
     <div className="catalog-copy">
-      <div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>${original.toFixed(2)}</span>}<strong>${finalPrice.toFixed(2)}</strong></div></div>
+      <div className="catalog-title"><h2>{item.product_name}</h2><div className="catalog-price">{discountPercent > 0 && <span className="price-original" aria-label={t.couponOriginalPrice}>¥{original.toFixed(2)}</span>}<strong>¥{finalPrice.toFixed(2)}</strong></div></div>
       <p>{item.description}</p>
-      <VariantChips product={item} selected={variantId} onSelect={setVariantId} />
+      <OptionTabs variants={sizeVariants} selected={variantId} onSelect={setVariantId} label={t.size} />
+      <OptionTabs variants={tempVariants} selected={temperatureId} onSelect={setTemperatureId} label={t.temperature} />
       <div className="inventory-row"><div><span>{t.inventory}</span><strong className={soldOut ? 'inventory-zero' : ''}>{soldOut ? t.soldOut : `${available} ${t.available}`}</strong></div>{reserved > 0 && <div className="reserved-count"><ShoppingBag />{reserved} {t.inYourCart}</div>}</div>
-      <button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item, variant)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>${finalPrice.toFixed(2)}</>}</button>
+      <button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item, variant, temperature)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>¥{finalPrice.toFixed(2)}</>}</button>
     </div>
   </article>
 }

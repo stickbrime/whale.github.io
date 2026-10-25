@@ -132,6 +132,10 @@ class ProductVariant(Base):
         ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(60), nullable=False)
+    # Variant group: "Size" options are mutually exclusive, "Temperature" options too.
+    group_name: Mapped[str] = mapped_column(
+        String(40), default="Size", server_default="Size", nullable=False
+    )
     price_delta: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), default=Decimal("0.00"), nullable=False
     )
@@ -212,6 +216,9 @@ class OrderItem(Base):
     # Snapshot of the chosen size/type so history survives variant edits.
     variant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     variant_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    # Snapshot of the chosen temperature option (e.g. Iced, Hot).
+    temperature_variant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    temperature_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     order_id: Mapped[int] = mapped_column(
         ForeignKey("orders.order_id", ondelete="CASCADE"), nullable=False, index=True
     )
