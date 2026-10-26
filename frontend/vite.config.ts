@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: '0.0.0.0',
+    allowedHosts: ['www.whalecoffeeshop.cloud', 'whalecoffeeshop.cloud', '42.192.110.219'],
     proxy: {
       '/api': 'http://127.0.0.1:8002',
       '/health': 'http://127.0.0.1:8002'

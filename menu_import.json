@@ -1,0 +1,217 @@
+[
+  {
+    "product_name": "Classic Latte",
+    "description": "Espresso with steamed milk.",
+    "price": "11.00",
+    "stock_quantity": 50,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 12,
+    "variants": [
+      {"variant_id": 31, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 33, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 32, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 34, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 35, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Coconut Latte",
+    "description": "Espresso with coconut milk.",
+    "price": "11.00",
+    "stock_quantity": 50,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 15,
+    "variants": [
+      {"variant_id": 50, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 52, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 51, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 53, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 54, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Green Apple Americano",
+    "description": "Espresso with crisp green apple and soda water.",
+    "price": "11.00",
+    "stock_quantity": 80,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Americano",
+    "category_id": 4,
+    "product_id": 7,
+    "variants": [
+      {"variant_id": 11, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 13, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 12, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 80, "sort_order": 1},
+      {"variant_id": 14, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 1}
+    ]
+  },
+  {
+    "product_name": "Green Apple Jasmine Sparkling Drink",
+    "description": "Jasmine tea, green apple and sparkling water.",
+    "price": "9.00",
+    "stock_quantity": 35,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Sparkling Drinks",
+    "category_id": 6,
+    "product_id": 18,
+    "variants": [
+      {"variant_id": 65, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 35, "sort_order": 0},
+      {"variant_id": 67, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 35, "sort_order": 0},
+      {"variant_id": 66, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 35, "sort_order": 1},
+      {"variant_id": 68, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 35, "sort_order": 1}
+    ]
+  },
+  {
+    "product_name": "Green Apple Sparkling Americano",
+    "description": "Espresso, green apple and sparkling water.",
+    "price": "11.00",
+    "stock_quantity": 80,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Americano",
+    "category_id": 4,
+    "product_id": 11,
+    "variants": [
+      {"variant_id": 27, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 29, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 28, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 80, "sort_order": 1},
+      {"variant_id": 30, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 1}
+    ]
+  },
+  {
+    "product_name": "Hazelnut Latte",
+    "description": "Espresso with hazelnut and steamed milk.",
+    "price": "11.00",
+    "stock_quantity": 50,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 6,
+    "variants": [
+      {"variant_id": 7, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 42, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 41, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 43, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 44, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Jasmine Americano",
+    "description": "Espresso infused with jasmine tea.",
+    "price": "11.00",
+    "stock_quantity": 80,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Americano",
+    "category_id": 4,
+    "product_id": 9,
+    "variants": [
+      {"variant_id": 19, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 21, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 20, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 80, "sort_order": 1},
+      {"variant_id": 22, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 1}
+    ]
+  },
+  {
+    "product_name": "Matcha Cheese Latte",
+    "description": "Matcha with a salted cheese foam cap.",
+    "price": "12.00",
+    "stock_quantity": 40,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 17,
+    "variants": [
+      {"variant_id": 60, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 0},
+      {"variant_id": 62, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 0},
+      {"variant_id": 61, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 40, "sort_order": 1},
+      {"variant_id": 63, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 1},
+      {"variant_id": 64, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Mocha",
+    "description": "Espresso, chocolate and steamed milk.",
+    "price": "12.00",
+    "stock_quantity": 40,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 13,
+    "variants": [
+      {"variant_id": 36, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 0},
+      {"variant_id": 38, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 0},
+      {"variant_id": 37, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 40, "sort_order": 1},
+      {"variant_id": 39, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 1},
+      {"variant_id": 40, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 40, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Rose Latte",
+    "description": "Espresso with rose syrup and steamed milk.",
+    "price": "11.00",
+    "stock_quantity": 50,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 14,
+    "variants": [
+      {"variant_id": 45, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 47, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 46, "name": "Large", "group_name": "Size", "price_delta": "4.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 48, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 49, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Salted Cheese Latte",
+    "description": "Espresso topped with salted cheese foam.",
+    "price": "12.00",
+    "stock_quantity": 50,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Latte",
+    "category_id": 5,
+    "product_id": 16,
+    "variants": [
+      {"variant_id": 55, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 57, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 0},
+      {"variant_id": 56, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 58, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 1},
+      {"variant_id": 59, "name": "Hot", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 50, "sort_order": 2}
+    ]
+  },
+  {
+    "product_name": "Sparkling Americano",
+    "description": "Espresso lengthened with sparkling water.",
+    "price": "11.00",
+    "stock_quantity": 80,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Americano",
+    "category_id": 4,
+    "product_id": 10,
+    "variants": [
+      {"variant_id": 23, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 25, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 24, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 80, "sort_order": 1},
+      {"variant_id": 26, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 1}
+    ]
+  },
+  {
+    "product_name": "Wumu Orange Americano",
+    "description": "Espresso brightened with wumu orange.",
+    "price": "11.00",
+    "stock_quantity": 80,
+    "image_url": "/coffee-default.jpg",
+    "category_name": "Americano",
+    "category_id": 4,
+    "product_id": 8,
+    "variants": [
+      {"variant_id": 15, "name": "Regular", "group_name": "Size", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 17, "name": "Iced", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 0},
+      {"variant_id": 16, "name": "Large", "group_name": "Size", "price_delta": "3.00", "stock_quantity": 80, "sort_order": 1},
+      {"variant_id": 18, "name": "Warm", "group_name": "Temperature", "price_delta": "0.00", "stock_quantity": 80, "sort_order": 1}
+    ]
+  }
+]

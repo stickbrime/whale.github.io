@@ -15,7 +15,12 @@ class Settings:
     app_name: str = "Coffee Shop Ordering API"
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./coffee_shop.db")
     cors_origins_raw: str = os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,"
+        "http://42.192.110.219,http://42.192.110.219:5173,"
+        "https://42.192.110.219,https://42.192.110.219:5173,"
+        "http://www.whalecoffeeshop.cloud:5173,https://www.whalecoffeeshop.cloud,"
+        "http://whalecoffeeshop.cloud:5173,https://whalecoffeeshop.cloud"
     )
 
     # Receipt printer (USB serial / ESC-POS thermal printer)

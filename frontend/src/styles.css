@@ -166,8 +166,8 @@ img { display: block; max-width: 100%; }
 .numbered-title h2 { margin: 0 0 4px; font-family: var(--serif); font-size: 24px; font-weight: 500; }
 .numbered-title p, .panel-heading p { margin: 0; color: var(--muted); font-size: 10px; }
 .segmented { width: max-content; margin-bottom: 20px; padding: 3px; display: flex; background: var(--paper-deep); }
-.segmented button { padding: 9px 16px; border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 10px; font-weight: 600; }
-.segmented button.active { color: var(--ink); background: var(--cream); box-shadow: 0 3px 12px rgba(30,40,33,.08); }
+.segmented button { padding: 9px 16px; border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 10px; font-weight: 600; opacity: .25; transition: opacity .2s; }
+.segmented button.active { color: var(--ink); background: var(--cream); box-shadow: 0 3px 12px rgba(30,40,33,.08); opacity: 1; }
 .signed-checkout-note { width: max-content; margin-bottom: 18px; padding: 9px 12px; display: flex; align-items: center; gap: 7px; color: #36664c; background: #dce9df; font-size: 9px; font-weight: 700; }.signed-checkout-note svg { width: 15px; }
 .customer-select-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .customer-option { padding: 13px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); cursor: pointer; }
@@ -681,10 +681,11 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 
 /* ===== Product variants ===== */
 .variant-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 0}
-.variant-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--coffee-3)}
+.variant-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
 .size-tabs{margin:0;gap:2px;flex-wrap:nowrap}
-.size-tabs button{display:inline-flex;align-items:baseline;gap:4px;padding:8px 14px;white-space:nowrap}
-.size-tabs button small{font-size:9px;font-weight:700;opacity:.7}
+.size-tabs button{display:inline-flex;align-items:baseline;gap:4px;padding:8px 14px;white-space:nowrap;opacity:.25;transition:opacity .2s}
+.size-tabs button.active{opacity:1}
+.size-tabs button small{font-size:9px;font-weight:700}
 .variant-picker .size-tabs{min-width:0}
 .cart-variant{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:var(--coffee-1);color:var(--coffee-4);font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;vertical-align:middle}
 .admin-sizes{max-width:190px}

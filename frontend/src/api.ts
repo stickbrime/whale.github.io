@@ -154,6 +154,12 @@ export const api = {
 
   // Coupons: list the active catalogue and claim one (increments server-side counter).
   coupons: () => request<Coupon[]>('/coupons'),
+  couponsAll: () => request<Coupon[]>('/coupons?active_only=false'),
+  createCoupon: (body: { code: string; title: string; description?: string | null; discount_percent: number; is_active?: boolean; valid_from?: string | null; valid_until?: string | null; max_claims?: number | null; sort_order?: number }) =>
+    request<Coupon>('/coupons', { method: 'POST', body: JSON.stringify(body) }),
+  updateCoupon: (id: number, body: Partial<{ code: string; title: string; description: string | null; discount_percent: number; is_active: boolean; valid_from: string | null; valid_until: string | null; max_claims: number | null; sort_order: number }>) =>
+    request<Coupon>(`/coupons/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteCoupon: (id: number) => request<void>(`/coupons/${id}`, { method: 'DELETE' }),
   claimCoupon: (couponId: number) =>
     request<{
       coupon_id: number

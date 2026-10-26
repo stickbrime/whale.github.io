@@ -259,7 +259,7 @@ function App() {
       )}
       <main>{page}</main>
       <Footer t={t} />
-      {!claimedCoupon && (
+      {!claimedCoupon && !path.startsWith('/admin') && (
         <button
           type="button"
           className="coupon-fab"
@@ -716,7 +716,7 @@ function SettingsPanel({ open, onClose, language, setLanguage, t }: { open: bool
   return <div className={open ? 'settings-layer open' : 'settings-layer'} aria-hidden={!open}><button className="settings-backdrop" onClick={onClose} aria-label={t.close} /><aside className="settings-drawer"><div className="drawer-head"><div><span className="eyebrow">WHALE</span><h2>{t.settingsTitle}</h2></div><button className="icon-button" onClick={onClose}><X /></button></div><div className="settings-group"><div className="settings-label"><Globe2 /><div><h3>{t.language}</h3><p>{t.languageSub}</p></div></div><div className="language-options"><button className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}><span>EN</span><div><strong>{t.english}</strong><small>English</small></div>{language === 'en' && <Check />}</button><button className={language === 'zh' ? 'selected' : ''} onClick={() => setLanguage('zh')}><span>中</span><div><strong>{t.chinese}</strong><small>Chinese</small></div>{language === 'zh' && <Check />}</button></div></div><div className="settings-row"><span className="settings-row-icon"><Sparkles /></span><div><strong>{t.appearance}</strong><small>{t.systemTheme}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><ShieldCheck /></span><div><strong>{t.privacy}</strong><small>{t.privacySub}</small></div><ChevronRight /></div><div className="settings-row"><span className="settings-row-icon"><CircleUserRound /></span><div><strong>{t.help}</strong><small>hello@whale.coffee</small></div><ChevronRight /></div><div className="drawer-footer"><Coffee /><span>Whale v1.0</span></div></aside></div>
 }
 
-function Footer({ t }: { t: any }) { return <footer><div className="container footer-inner"><Link className="brand footer-brand" to="/"><span className="brand-mark"><Coffee size={18} /></span>WHALE</Link><p>{t.thoughtfulCoffee}</p><nav><Link to="/">{t.order}</Link><Link to="/shop">{t.shop}</Link><Link to="/settle">{t.settle}</Link><Link to="/account">{t.account}</Link><a href="/docs">API</a></nav><span>© {new Date().getFullYear()} Whale</span></div></footer> }
+function Footer({ t }: { t: any }) { return <footer><div className="container footer-inner"><Link className="brand footer-brand" to="/"><span className="brand-mark"><Coffee size={18} /></span>WHALE</Link><p>{t.thoughtfulCoffee}</p><nav><Link to="/">{t.order}</Link><Link to="/shop">{t.shop}</Link><Link to="/settle">{t.settle}</Link><Link to="/account">{t.account}</Link><a href="/docs">API</a></nav><span>© {new Date().getFullYear()} Whale · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>京ICP备2026054406号-1</a></span></div></footer> }
 
 function LoginRoute({ t, onDone }: { t: any; onDone: () => Promise<void> }) {
   const navigate = useNavigate()
@@ -811,7 +811,7 @@ function AdminPage({ t }: { t: any }) {
   const [loginUser, setLoginUser] = useState('')
   const [loginPass, setLoginPass] = useState('')
   const [loginErr, setLoginErr] = useState('')
-  const [tab, setTab] = useState<'orders' | 'products' | 'market' | 'customers' | 'settings' | 'logs'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'market' | 'customers' | 'settings' | 'logs' | 'coupons'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -824,7 +824,7 @@ function AdminPage({ t }: { t: any }) {
   const [newProductSizes, setNewProductSizes] = useState({
     regularPrice: '',
     bigPrice: '',
-    temps: { Iced: true, Hot: true, Warm: false } as Record<string, boolean>
+    temps: { Iced: true, Warm: true, Hot: false } as Record<string, boolean>
   })
   const [creating, setCreating] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
@@ -988,6 +988,7 @@ function AdminPage({ t }: { t: any }) {
           <button className={tab === 'customers' ? 'active' : ''} onClick={() => setTab('customers')}>{t.staffUsers}</button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>{t.staffSettings}</button>
           <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>{t.staffLogs}</button>
+          <button className={tab === 'coupons' ? 'active' : ''} onClick={() => setTab('coupons')}>{t.adminCoupons ?? 'Coupons'}</button>
         </div>
 
         {loading ? <div className="settle-empty-mini"><LoaderCircle className="spin" /></div> :
@@ -1135,7 +1136,7 @@ function AdminPage({ t }: { t: any }) {
                           {p.variants.length > 0
                             ? p.variants.map(v => <span className="admin-size-chip" key={v.variant_id}>{v.name}{Number(v.price_delta) !== 0 && <small>{Number(v.price_delta) > 0 ? '+' : '−'}¥{Math.abs(Number(v.price_delta)).toFixed(2)}</small>}</span>)
                             : <small className="admin-no-sizes">{t.adminNoSizes ?? 'None'}</small>}
-                          <button className="admin-sizes-edit" onClick={() => setEditingProduct(editingProduct?.product_id === p.product_id ? null : p)}>{t.adminEditSizes ?? 'Edit sizes'}</button>
+                          <button className="button button-ghost button-mini" onClick={() => setEditingProduct(editingProduct?.product_id === p.product_id ? null : p)}>{t.adminEdit ?? 'Edit'}</button>
                         </td>
                         <td className="num"><strong>¥{Number(p.price).toFixed(2)}</strong></td>
                         <td className="num">
@@ -1167,6 +1168,8 @@ function AdminPage({ t }: { t: any }) {
           <SettingsTab t={t} />
         ) : tab === 'logs' ? (
           <LogsTab t={t} />
+        ) : tab === 'coupons' ? (
+          <CouponsTab t={t} />
         ) : (
           <MarketPage t={t} />
         )}
@@ -2154,6 +2157,135 @@ function CatalogCard({ item, index, t, cart, locked, addToCart, discountPercent,
       <button className="catalog-add" disabled={locked || soldOut} onClick={() => addToCart(item, variant, temperature)}>{soldOut ? t.soldOut : <><Plus />{t.add}<span>·</span>¥{finalPrice.toFixed(2)}</>}</button>
     </div>
   </article>
+}
+
+function CouponsTab({ t }: { t: any }) {
+  const [coupons, setCoupons] = useState<Coupon[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Coupon | null>(null)
+  const [form, setForm] = useState({
+    code: '', title: '', description: '', discount_percent: '',
+    is_active: true, valid_from: '', valid_until: '', max_claims: '', sort_order: '0'
+  })
+
+  const refresh = () => {
+    api.couponsAll().then(setCoupons).catch(() => {}).finally(() => setLoading(false))
+  }
+  useEffect(refresh, [])
+
+  const openNew = () => {
+    setEditing(null)
+    setForm({ code: '', title: '', description: '', discount_percent: '', is_active: true, valid_from: '', valid_until: '', max_claims: '', sort_order: '0' })
+  }
+  const openEdit = (c: Coupon) => {
+    setEditing(c)
+    setForm({
+      code: c.code, title: c.title, description: c.description ?? '',
+      discount_percent: String(c.discount_percent), is_active: c.is_active,
+      valid_from: c.valid_from ?? '', valid_until: c.valid_until ?? '',
+      max_claims: c.max_claims !== null ? String(c.max_claims) : '',
+      sort_order: String(c.sort_order)
+    })
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    const body = {
+      code: form.code,
+      title: form.title,
+      description: form.description || null,
+      discount_percent: Number(form.discount_percent),
+      is_active: form.is_active,
+      valid_from: form.valid_from || null,
+      valid_until: form.valid_until || null,
+      max_claims: form.max_claims ? Number(form.max_claims) : null,
+      sort_order: Number(form.sort_order || 0)
+    }
+    try {
+      if (editing) {
+        await api.updateCoupon(editing.coupon_id, body)
+      } else {
+        await api.createCoupon(body)
+      }
+      setEditing(null)
+      refresh()
+    } catch (err: any) {
+      console.error(err)
+      alert(err?.message || 'Failed to save coupon')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (c: Coupon) => {
+    if (!confirm(`Delete coupon "${c.title}"? This cannot be undone.`)) return
+    try { await api.deleteCoupon(c.coupon_id); refresh() } catch {}
+  }
+
+  return <section className="admin-section">
+    <div className="admin-toolbar">
+      <h3 style={{ margin: 0 }}>Coupons</h3>
+      <button className="button button-dark button-mini" onClick={openNew}>+ New coupon</button>
+    </div>
+
+    {editing !== null || (form.code === '' && form.title === '') ? null : null}
+    {(editing !== null || form.code !== '' || form.title !== '') && (
+      <form className="admin-form" onSubmit={submit} style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center' }}>
+          <h4 style={{ margin: 0 }}>{editing ? `Edit · ${editing.title}` : 'New coupon'}</h4>
+          <button type="button" className="text-button" onClick={() => { setEditing(null); openNew() }}>Cancel</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 10 }}>
+          <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="Code (e.g. SAVE10)" required />
+          <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Title" required />
+          <input type="number" step="0.01" min="0" max="100" value={form.discount_percent} onChange={e => setForm({ ...form, discount_percent: e.target.value })} placeholder="Discount %" required />
+        </div>
+        <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Description (optional)" style={{ marginBottom: 10 }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
+          <input type="date" value={form.valid_from} onChange={e => setForm({ ...form, valid_from: e.target.value })} />
+          <input type="date" value={form.valid_until} onChange={e => setForm({ ...form, valid_until: e.target.value })} />
+          <input type="number" min="0" value={form.max_claims} onChange={e => setForm({ ...form, max_claims: e.target.value })} placeholder="Max claims" />
+          <input type="number" value={form.sort_order} onChange={e => setForm({ ...form, sort_order: e.target.value })} placeholder="Sort order" />
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 12 }}>
+          <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} /> Active
+        </label>
+        <div>
+          <button type="submit" className="button button-dark button-mini" disabled={saving}>{saving ? 'Saving…' : (editing ? 'Save changes' : 'Create coupon')}</button>
+        </div>
+      </form>
+    )}
+
+    {loading ? <div className="admin-empty"><LoaderCircle className="spin" /> Loading…</div> :
+    coupons.length === 0 ? <div className="admin-empty">No coupons yet. Click "New coupon" to create one.</div> :
+    <table className="admin-table">
+      <thead>
+        <tr>
+          <th>Code</th><th>Title</th><th>Discount</th><th>Claimed</th><th>Valid</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {coupons.map(c => (
+          <tr key={c.coupon_id}>
+            <td><strong>{c.code}</strong></td>
+            <td>{c.title}{c.description && <small style={{ display: 'block', color: 'var(--coffee-3)' }}>{c.description}</small>}</td>
+            <td><strong>{Number(c.discount_percent).toFixed(0)}%</strong></td>
+            <td>{c.claimed_count}{c.max_claims !== null ? ` / ${c.max_claims}` : ''}</td>
+            <td style={{ fontSize: 11, color: 'var(--coffee-3)' }}>
+              {c.valid_from ?? '—'} → {c.valid_until ?? '∞'}
+            </td>
+            <td>{c.is_active ? <span className="badge-ok">Active</span> : <span className="badge-out">Inactive</span>}</td>
+            <td>
+              <button className="button button-ghost button-mini" onClick={() => openEdit(c)}>Edit</button>{' '}
+              <button className="button button-danger button-mini" onClick={() => remove(c)}>Delete</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>}
+  </section>
 }
 
 export default App

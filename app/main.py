@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse
 
 from app import models, schemas
 from app.api import (
@@ -24,6 +26,9 @@ from app.database import Base, engine
 from app.integrity import prepare_database
 
 
+ICP_HTML = '<div style="text-align:center;padding:20px 0;color:#666;font-size:13px;position:fixed;bottom:0;width:100%;background:#fafafa;border-top:1px solid #e0e0e0;z-index:9999;"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:#666;text-decoration:none;">京ICP备2026054406号-1</a></div>'
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -39,6 +44,8 @@ app = FastAPI(
         "and transactional coffee orders."
     ),
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
 
 app.add_middleware(
@@ -60,6 +67,11 @@ app.include_router(stats.router, prefix="/api/v1")
 app.include_router(account.router, prefix="/api/v1")
 app.include_router(staff.router, prefix="/api/v1")
 app.include_router(store.router, prefix="/api/v1")
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html() -> HTMLResponse:
+    return HTMLResponse(get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.app_name} - Docs").body.decode() + ICP_HTML)
 
 
 @app.get("/", include_in_schema=False)
