@@ -1,0 +1,15 @@
+[Unit]
+Description=Whale Coffee Shop Backend (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/whale.github.io
+ExecStart=/home/ubuntu/whale.github.io/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8002
+Restart=always
+RestartSec=3
+Environment=DATABASE_URL=sqlite:///./coffee_shop.db
+
+[Install]
+WantedBy=multi-user.target

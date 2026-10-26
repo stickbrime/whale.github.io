@@ -2164,6 +2164,7 @@ function CouponsTab({ t }: { t: any }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<Coupon | null>(null)
+  const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
     code: '', title: '', description: '', discount_percent: '',
     is_active: true, valid_from: '', valid_until: '', max_claims: '', sort_order: '0'
@@ -2176,10 +2177,12 @@ function CouponsTab({ t }: { t: any }) {
 
   const openNew = () => {
     setEditing(null)
+    setShowForm(true)
     setForm({ code: '', title: '', description: '', discount_percent: '', is_active: true, valid_from: '', valid_until: '', max_claims: '', sort_order: '0' })
   }
   const openEdit = (c: Coupon) => {
     setEditing(c)
+    setShowForm(true)
     setForm({
       code: c.code, title: c.title, description: c.description ?? '',
       discount_percent: String(c.discount_percent), is_active: c.is_active,
@@ -2188,6 +2191,7 @@ function CouponsTab({ t }: { t: any }) {
       sort_order: String(c.sort_order)
     })
   }
+  const closeForm = () => { setShowForm(false); setEditing(null) }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -2210,6 +2214,7 @@ function CouponsTab({ t }: { t: any }) {
         await api.createCoupon(body)
       }
       setEditing(null)
+      setShowForm(false)
       refresh()
     } catch (err: any) {
       console.error(err)
@@ -2230,12 +2235,11 @@ function CouponsTab({ t }: { t: any }) {
       <button className="button button-dark button-mini" onClick={openNew}>+ New coupon</button>
     </div>
 
-    {editing !== null || (form.code === '' && form.title === '') ? null : null}
-    {(editing !== null || form.code !== '' || form.title !== '') && (
+    {showForm && (
       <form className="admin-form" onSubmit={submit} style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center' }}>
           <h4 style={{ margin: 0 }}>{editing ? `Edit · ${editing.title}` : 'New coupon'}</h4>
-          <button type="button" className="text-button" onClick={() => { setEditing(null); openNew() }}>Cancel</button>
+          <button type="button" className="text-button" onClick={closeForm}>Cancel</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 10 }}>
           <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="Code (e.g. SAVE10)" required />
