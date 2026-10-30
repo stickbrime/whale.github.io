@@ -266,7 +266,7 @@ function App() {
           onClick={() => setCouponPopupOpen(true)}
           aria-label={t.couponFloating}
         >
-          <Tag size={18} />
+          <Tag size={14} />
           <span>{t.couponFloating}</span>
         </button>
       )}

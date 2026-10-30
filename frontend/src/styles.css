@@ -423,9 +423,9 @@ footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.fo
 .spin{animation:spin 1s linear infinite}
 
 /* ---------- Coupon: floating button + popup ---------- */
-.coupon-fab{position:fixed;right:22px;bottom:22px;z-index:60;display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border:0;border-radius:40px;color:var(--cream);background:var(--forest);box-shadow:0 14px 34px rgba(20,30,24,.28);cursor:pointer;font-size:11px;font-weight:600;letter-spacing:.04em;animation:pop-in .3s ease}
+.coupon-fab{position:fixed;right:18px;bottom:76px;z-index:60;display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border:0;border-radius:40px;color:var(--cream);background:var(--forest);box-shadow:0 8px 20px rgba(20,30,24,.22);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.04em;animation:pop-in .3s ease}
 .coupon-fab:hover{background:var(--forest-soft);transform:translateY(-2px)}
-.coupon-fab span{font-size:11px}
+.coupon-fab span{font-size:10px}
 .coupon-layer{position:fixed;z-index:140;inset:0;display:grid;place-items:center;padding:20px}
 .coupon-backdrop{position:absolute;inset:0;border:0;background:rgba(18,27,22,.55);animation:fade-in .2s ease}
 .coupon-modal{position:relative;width:min(560px,100%);max-height:92vh;padding:40px 34px 28px;overflow-y:auto;background:var(--cream);box-shadow:var(--shadow);animation:pop-in .25s ease;border-radius:6px}
