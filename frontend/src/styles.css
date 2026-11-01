@@ -238,6 +238,9 @@ img { display: block; max-width: 100%; }
 .loading-block { min-height: 300px; display: flex; justify-content: center; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }.spin { animation: spin 1s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }.muted { color: var(--muted); font-size: 10px; }
 
 footer { padding: 34px 0; color: rgba(255,255,255,.6); background: #18251f; }.footer-inner { display: grid; grid-template-columns: auto 1fr auto auto; gap: 35px; align-items: center; }.footer-brand { color: white; font-size: 12px; }.footer-brand .brand-mark { background: rgba(255,255,255,.1); }.footer-inner p, .footer-inner > span { font-size: 8px; }.footer-inner nav { display: flex; gap: 20px; font-size: 9px; }.footer-inner nav a:hover { color: white; }
+.footer-icp-wrap { display: flex; justify-content: center; margin-top: 22px; padding: 0 15px; }
+.footer-icp { font-size: 24px; font-weight: 700; line-height: 1.25; color: #fff; letter-spacing: .02em; text-decoration: none; text-align: center; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+.footer-icp:hover, .footer-icp:focus-visible { color: #f6e7c8; text-decoration: underline; text-underline-offset: 6px; }
 
 @media (max-width: 900px) {
   .product-grid { grid-template-columns: repeat(2, 1fr); }
