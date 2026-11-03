@@ -53,6 +53,12 @@ class Customer(Base):
     wechat_open_id: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, unique=True, index=True
     )
+    password_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    @property
+    def has_password(self) -> bool:
+        """True when a staff sign-in password has been provisioned."""
+        return bool(self.password_hash)
 
     orders: Mapped[List["Order"]] = relationship(back_populates="customer", passive_deletes=True)
     balance_transactions: Mapped[List["BalanceTransaction"]] = relationship(

@@ -63,6 +63,39 @@ def _ensure_login_allowed(customer: models.Customer) -> None:
         )
 
 
+_PASSWORD_ALGORITHM = "pbkdf2_sha256"
+_PASSWORD_ITERATIONS = 200_000
+
+
+def hash_password(password: str) -> str:
+    """Return a salted PBKDF2-SHA256 hash in ``algorithm$iterations$salt$digest`` form."""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), salt.encode(), _PASSWORD_ITERATIONS
+    )
+    return f"{_PASSWORD_ALGORITHM}${_PASSWORD_ITERATIONS}${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored: Optional[str]) -> bool:
+    """Constant-time check of a plain password against a stored hash."""
+    if not stored:
+        return False
+    try:
+        algorithm, iterations, salt, digest = stored.split("$")
+        rounds = int(iterations)
+    except ValueError:
+        return False
+    if algorithm != _PASSWORD_ALGORITHM:
+        return False
+    computed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), rounds)
+    return secrets.compare_digest(computed.hex(), digest)
+
+
+def is_staff_account(customer: models.Customer) -> bool:
+    """Staff accounts hold a staff/admin role or at least one staff permission."""
+    return customer.role in ("staff", "admin") or bool(customer.permission_list)
+
+
 def _split_name(full_name: str) -> tuple:
     parts = full_name.strip().split(" ", 1)
     if len(parts) == 1:
@@ -104,9 +137,46 @@ def manual_login(
         db.commit()
         db.refresh(customer)
 
+    if is_staff_account(customer):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff accounts must sign in with a password",
+        )
+
     _ensure_login_allowed(customer)
     _set_customer_cookie(response, customer.customer_id)
     return schemas.Message(message=f"Logged in as {customer.first_name} {customer.last_name}")
+
+
+@router.post("/staff/login", response_model=schemas.Message)
+def staff_login(
+    payload: schemas.StaffLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Staff sign-in with email + password.
+
+    Staff accounts never use the passwordless customer flows; they must have a
+    password provisioned by an administrator.
+    """
+    customer = db.scalar(
+        select(models.Customer).where(models.Customer.email == payload.email)
+    )
+    if customer is None or not is_staff_account(customer):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid staff credentials",
+        )
+    _ensure_login_allowed(customer)
+    if not verify_password(payload.password, customer.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid staff credentials",
+        )
+    _set_customer_cookie(response, customer.customer_id)
+    return schemas.Message(
+        message=f"Logged in as {customer.first_name} {customer.last_name}".strip()
+    )
 
 
 @router.post("/login/phone", response_model=schemas.Message)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import {
   BadgeCheck,
   Banknote,
@@ -14,7 +15,6 @@ import {
   Wallet
 } from 'lucide-react'
 import { api } from './api'
-import { LoginPage } from './LoginPage'
 import type { AuditLog, Order, StaffCustomer, StaffProfile, StoreSettings } from './types'
 
 type Tab = 'orders' | 'charge'
@@ -33,6 +33,59 @@ const PERMISSIONS = [
 ]
 
 const ROLES = ['customer', 'student', 'staff', 'admin']
+
+function StaffLoginForm({ t, onDone }: { t: any; onDone: () => Promise<void> }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.staffLogin({ email: email.trim(), password })
+      await onDone()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="staff-login-form" onSubmit={submit}>
+      <p className="staff-login-sub">{t.staffLoginSub}</p>
+      <div className="field">
+        <span>{t.staffLoginEmail}</span>
+        <input
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="staff@whalecoffeeshop.cloud"
+        />
+      </div>
+      <div className="field">
+        <span>{t.staffLoginPassword}</span>
+        <input
+          type="password"
+          autoComplete="current-password"
+          required
+          minLength={6}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+      </div>
+      {error && <p className="staff-login-error">{error}</p>}
+      <button className="button button-primary" type="submit" disabled={busy}>
+        {busy ? t.brewing : t.staffLoginButton}
+      </button>
+    </form>
+  )
+}
 
 export function StaffPage({ t, onLogin }: { t: any; onLogin: () => Promise<void> }) {
   const [profile, setProfile] = useState<StaffProfile | null>(null)
@@ -77,7 +130,7 @@ export function StaffPage({ t, onLogin }: { t: any; onLogin: () => Promise<void>
       <section className="page-section">
         <div className="container staff-login">
           <p className="staff-login-hint"><ShieldCheck size={16} />{t.staffLoginHint}</p>
-          <LoginPage t={t} onDone={async () => { await onLogin(); await loadProfile() }} />
+          <StaffLoginForm t={t} onDone={async () => { await onLogin(); await loadProfile() }} />
         </div>
       </section>
     )
@@ -496,6 +549,29 @@ function UserRow({
   const [permissions, setPermissions] = useState<string[]>(user.permissions)
   const [points, setPoints] = useState(String(user.loyalty_points))
   const [delta, setDelta] = useState('')
+  const [password, setPassword] = useState('')
+  const [hasPassword, setHasPassword] = useState(user.has_password)
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordNote, setPasswordNote] = useState('')
+
+  const savePassword = async () => {
+    if (password.trim().length < 6) {
+      setPasswordNote(t.staffPasswordTooShort)
+      return
+    }
+    setPasswordBusy(true)
+    setPasswordNote('')
+    try {
+      await api.staffSetPassword(user.customer_id, password.trim())
+      setHasPassword(true)
+      setPassword('')
+      setPasswordNote(t.staffPasswordSaved)
+    } catch (err) {
+      setPasswordNote((err as Error).message)
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
 
   const toggle = (permission: string) => {
     setPermissions(current => current.includes(permission)
@@ -520,6 +596,7 @@ function UserRow({
         <div className="staff-user-copy">
           <strong>{user.first_name} {user.last_name}
             {user.blocked ? <span className="staff-pill blocked">{t.staffBlocked}</span> : null}
+            {!hasPassword ? <span className="staff-pill blocked">{t.staffPasswordMissing}</span> : null}
           </strong>
           <small>{user.email} · {user.phone}</small>
         </div>
@@ -584,6 +661,23 @@ function UserRow({
           <button className="button button-dark" disabled={busy} onClick={apply}>
             {busy ? <LoaderCircle className="spin" size={14} /> : <><Save size={14} />{t.staffApply}</>}
           </button>
+          <div className="staff-password-set">
+            <label className="staff-field">
+              <span>{t.staffPassword}</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                placeholder={t.staffPasswordHint}
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+              />
+            </label>
+            <button className="button button-dark" disabled={passwordBusy || password.trim().length < 6} onClick={savePassword}>
+              {passwordBusy ? <LoaderCircle className="spin" size={14} /> : t.staffPasswordSet}
+            </button>
+          </div>
+          {passwordNote && <p className="staff-password-note">{passwordNote}</p>}
         </div>
       )}
     </article>

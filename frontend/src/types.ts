@@ -158,7 +158,7 @@ export type StaffProfile = {
   is_admin: boolean
 }
 
-export type StaffCustomer = Customer & { order_count: number }
+export type StaffCustomer = Customer & { order_count: number; has_password: boolean }
 
 export type AuditLog = {
   audit_log_id: number

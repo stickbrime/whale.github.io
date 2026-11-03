@@ -292,6 +292,15 @@ class ManualLoginRequest(BaseModel):
     last_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
 
+class StaffLoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class StaffPasswordRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=200)
+
+
 class CreditStatus(ORMModel):
     customer_id: int
     locked: bool
@@ -541,6 +550,7 @@ class StaffProfile(BaseModel):
 
 class StaffCustomerRead(CustomerRead):
     order_count: int = 0
+    has_password: bool = False
 
 
 class StaffUserUpdate(BaseModel):

@@ -277,6 +277,7 @@ def _ensure_customer_account_columns(connection) -> None:
         "seiue_id": "ALTER TABLE customers ADD COLUMN seiue_id INTEGER NULL",
         "feishu_open_id": "ALTER TABLE customers ADD COLUMN feishu_open_id VARCHAR(100) NULL",
         "wechat_open_id": "ALTER TABLE customers ADD COLUMN wechat_open_id VARCHAR(100) NULL",
+        "password_hash": "ALTER TABLE customers ADD COLUMN password_hash VARCHAR(128) NULL",
     }
     for column, statement in additions.items():
         if column not in existing:

@@ -13,6 +13,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas, store_settings
+from app.api.auth import hash_password
 from app.api.deps import (
     STAFF_PERMISSIONS,
     require_permission,
@@ -187,6 +188,27 @@ def list_users(
         item.order_count = int(counts.get(entry.customer_id, 0))
         result.append(item)
     return result
+
+
+@router.post("/users/{customer_id}/password", response_model=schemas.Message)
+def set_user_password(
+    customer_id: int,
+    payload: schemas.StaffPasswordRequest,
+    actor: Optional[models.Customer] = Depends(require_permission("users.manage")),
+    db: Session = Depends(get_db),
+):
+    """Set (or reset) the password required for a staff account to sign in."""
+    entry = get_or_404(db, models.Customer, customer_id, "Customer")
+    entry.password_hash = hash_password(payload.password)
+    store_settings.record_audit(
+        db,
+        actor.customer_id if actor else None,
+        "userPasswordSet",
+        target=f"customer:{entry.customer_id}",
+        detail="password updated",
+    )
+    db.commit()
+    return schemas.Message(message="Password updated")
 
 
 @router.patch("/users/{customer_id}", response_model=schemas.StaffCustomerRead)

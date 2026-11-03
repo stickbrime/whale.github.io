@@ -48,6 +48,8 @@ export const api = {
   creditStatus: (id: number) => request<CreditStatus>(`/orders/customers/${id}/credit-status`),
   manualLogin: (data: { email: string; first_name?: string; last_name?: string }) =>
     request<{ message: string }>('/auth/login/manual', { method: 'POST', body: JSON.stringify(data) }),
+  staffLogin: (data: { email: string; password: string }) =>
+    request<{ message: string }>('/auth/staff/login', { method: 'POST', body: JSON.stringify(data) }),
   phoneLogin: (data: { phone: string; first_name?: string; last_name?: string }) =>
     request<{ message: string }>('/auth/login/phone', { method: 'POST', body: JSON.stringify(data) }),
   studentLogin: (data: { seiue_id: number; name: string; phone?: string }) =>
@@ -90,6 +92,11 @@ export const api = {
       note?: string
     }
   ) => request<StaffCustomer>(`/staff/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  staffSetPassword: (id: number, password: string) =>
+    request<{ message: string }>(`/staff/users/${id}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    }),
   staffLogs: () => request<AuditLog[]>('/staff/logs'),
   staffCharge: (id: number, amount: string, note?: string) =>
     request<StaffCustomer>(`/staff/users/${id}/charge`, {
